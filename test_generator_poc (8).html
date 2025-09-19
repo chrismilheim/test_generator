@@ -1,0 +1,2410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Generator - Proof of Concept</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/uuid/8.3.2/uuid.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f8fafc;
+            color: #1f2937;
+        }
+        
+        .header {
+            background: white;
+            border-bottom: 1px solid #e5e7eb;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+            padding: 1rem 0;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 1rem;
+        }
+        
+        .title {
+            font-size: 1.875rem;
+            font-weight: bold;
+            color: #111827;
+            margin-bottom: 1rem;
+        }
+        
+        .tab-container {
+            display: flex;
+            gap: 0.25rem;
+        }
+        
+        .tab {
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            border-radius: 0.375rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: transparent;
+            border: none;
+        }
+        
+        .tab.active {
+            background-color: #dbeafe;
+            color: #1d4ed8;
+        }
+        
+        .tab:hover:not(.active) {
+            color: #374151;
+        }
+        
+        .main-content {
+            padding: 1.5rem 0;
+        }
+        
+        .grid {
+            display: grid;
+            gap: 1.5rem;
+        }
+        
+        .grid-2 {
+            grid-template-columns: 1fr 1fr;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 0.5rem;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+            padding: 1.5rem;
+        }
+        
+        .card-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+        }
+        
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        
+        .form-label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #374151;
+            margin-bottom: 0.25rem;
+        }
+        
+        .form-input, .form-textarea, .form-select {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #d1d5db;
+            border-radius: 0.375rem;
+            font-size: 0.875rem;
+        }
+        
+        .form-textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+        
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+        }
+        
+        .btn {
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s;
+        }
+        
+        .btn-primary {
+            background-color: #2563eb;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background-color: #1d4ed8;
+        }
+        
+        .btn-success {
+            background-color: #059669;
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background-color: #047857;
+        }
+        
+        .btn-secondary {
+            background-color: #6b7280;
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background-color: #4b5563;
+        }
+        
+        .btn-danger {
+            background-color: #dc2626;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background-color: #b91c1c;
+        }
+        
+        .btn-small {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+        }
+        
+        .question-item {
+            border: 1px solid #e5e7eb;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .question-header {
+            display: flex;
+            justify-content: between;
+            align-items: flex-start;
+            margin-bottom: 0.5rem;
+        }
+        
+        .question-badges {
+            display: flex;
+            gap: 0.25rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .badge {
+            padding: 0.125rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        
+        .badge-blue {
+            background-color: #dbeafe;
+            color: #1e40af;
+        }
+        
+        .badge-green {
+            background-color: #d1fae5;
+            color: #065f46;
+        }
+        
+        .badge-purple {
+            background-color: #e9d5ff;
+            color: #7c2d12;
+        }
+        
+        .question-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+        
+        .option-item {
+            border: 1px solid #e5e7eb;
+            border-radius: 0.375rem;
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .option-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .format-toolbar {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .format-btn {
+            padding: 0.25rem 0.5rem;
+            background-color: #f3f4f6;
+            border: 1px solid #d1d5db;
+            border-radius: 0.25rem;
+            cursor: pointer;
+            font-size: 0.75rem;
+        }
+        
+        .format-btn:hover {
+            background-color: #e5e7eb;
+        }
+        
+        .preview {
+            font-size: 0.875rem;
+            color: #6b7280;
+            margin-top: 0.5rem;
+        }
+        
+        .scrollable {
+            max-height: 800px;
+            overflow-y: auto;
+        }
+        
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .table th,
+        .table td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        
+        .table th {
+            background-color: #f9fafb;
+            font-weight: 500;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: #6b7280;
+        }
+        
+        .loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        
+        .loading-content {
+            background: white;
+            padding: 2rem;
+            border-radius: 0.5rem;
+            text-align: center;
+        }
+        
+        .spinner {
+            border: 3px solid #f3f4f6;
+            border-top: 3px solid #2563eb;
+            border-radius: 50%;
+            width: 2rem;
+            height: 2rem;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+        
+        .flex {
+            display: flex;
+        }
+        
+        .items-center {
+            align-items: center;
+        }
+        
+        .justify-between {
+            justify-content: space-between;
+        }
+        
+        .gap-2 {
+            gap: 0.5rem;
+        }
+        
+        .mt-4 {
+            margin-top: 1rem;
+        }
+        
+        .w-full {
+            width: 100%;
+        }
+        
+        .text-sm {
+            font-size: 0.875rem;
+        }
+        
+        .export-import {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        @media (max-width: 768px) {
+            .grid-2 {
+                grid-template-columns: 1fr;
+            }
+            
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="container">
+            <h1 class="title">Test Generator - Proof of Concept</h1>
+            <div class="tab-container">
+                <button class="tab active" onclick="showTab('questions')">Questions</button>
+                <button class="tab" onclick="showTab('templates')">Templates</button>
+                <button class="tab" onclick="showTab('generated')">Generated Tests</button>
+                <button class="tab" onclick="showTab('data')">Data Management</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="container main-content">
+        <!-- Questions Tab -->
+        <div id="tab-questions" class="tab-content">
+            <div class="grid grid-2">
+                <div class="card">
+                    <div class="flex justify-between items-center">
+                        <h2 class="card-title" id="question-form-title">Add New Question</h2>
+                        <button id="cancel-edit-btn" class="btn btn-secondary btn-small hidden" onclick="cancelEdit()">Cancel</button>
+                    </div>
+                    
+                    <form id="question-form">
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label class="form-label">Base ID</label>
+                                <input type="text" id="baseId" class="form-input" placeholder="1, 2, 3..." required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Variant</label>
+                                <input type="text" id="variant" class="form-input" placeholder="a, b, c..." required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Question ID</label>
+                                <input type="text" id="questionId" class="form-input" readonly>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Genre</label>
+                            <input type="text" id="genre" class="form-input" placeholder="Math, Science, History..." required>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Type</label>
+                            <select id="questionType" class="form-select" onchange="toggleQuestionType()">
+                                <option value="multiple-choice">Multiple Choice</option>
+                                <option value="short-answer">Short Answer</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Question Text</label>
+                            <div class="format-toolbar">
+                                <button type="button" class="format-btn" onclick="formatText('questionText', 'bold')"><b>B</b></button>
+                                <button type="button" class="format-btn" onclick="formatText('questionText', 'underline')"><u>U</u></button>
+                            </div>
+                            <textarea id="questionText" class="form-textarea" oninput="updatePreview('questionText', 'questionPreview')" required></textarea>
+                            <div class="preview">Preview: <span id="questionPreview"></span></div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Question Image (optional)</label>
+                            <input type="file" id="questionImage" class="form-input" accept="image/*" onchange="handleImageUpload('questionImage')">
+                        </div>
+
+                        <div id="multiple-choice-section">
+                            <label class="form-label">Answer Options</label>
+                            <div id="options-container">
+                                <!-- Options will be generated here -->
+                            </div>
+                        </div>
+
+                        <div id="short-answer-section" class="form-group hidden">
+                            <label class="form-label">Correct Answer</label>
+                            <textarea id="correctAnswer" class="form-textarea" placeholder="Enter the correct answer..."></textarea>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary w-full">
+                            <span id="submit-btn-text">Create Question</span>
+                        </button>
+                    </form>
+                </div>
+
+                <div class="card">
+                    <h2 class="card-title">Question Library</h2>
+                    <div id="questions-list" class="scrollable"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Templates Tab -->
+        <div id="tab-templates" class="tab-content hidden">
+            <div class="grid grid-2">
+                <div class="card">
+                    <h2 class="card-title">Create Test Template</h2>
+                    
+                    <form id="template-form">
+                        <div class="form-group">
+                            <label class="form-label">Test Title</label>
+                            <input type="text" id="templateTitle" class="form-input" placeholder="Midterm Exam - Chapter 5" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Header Information</label>
+                            <textarea id="templateHeader" class="form-textarea" placeholder="Name: _________________ Date: _________"></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Instructions</label>
+                            <textarea id="templateInstructions" class="form-textarea" placeholder="Choose the best answer for each question..."></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Select Questions</label>
+                            
+                            <!-- Question Selection Controls -->
+                            <div style="margin-bottom: 1rem; padding: 0.75rem; background-color: #f9fafb; border-radius: 0.375rem; border: 1px solid #e5e7eb;">
+                                <div style="display: flex; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap;">
+                                    <button type="button" class="btn btn-small btn-primary" onclick="selectAllQuestions()">Select All</button>
+                                    <button type="button" class="btn btn-small btn-secondary" onclick="selectNoneQuestions()">Select None</button>
+                                    <button type="button" class="btn btn-small btn-success" onclick="selectByGenre()">Select by Genre</button>
+                                    <button type="button" class="btn btn-small btn-primary" onclick="selectOnePerBase()">One per Base ID</button>
+                                </div>
+                                
+                                <!-- Quick Genre Selection -->
+                                <div id="genre-selection" class="hidden" style="margin-bottom: 0.75rem;">
+                                    <div style="display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem;">
+                                        <span style="font-size: 0.875rem; font-weight: 500;">Select Genre:</span>
+                                        <select id="genre-selector" class="form-select" style="width: auto;">
+                                            <!-- Genres will be populated dynamically -->
+                                        </select>
+                                        <button type="button" class="btn btn-small btn-success" onclick="applyGenreSelection()">Apply</button>
+                                        <button type="button" class="btn btn-small btn-secondary" onclick="cancelGenreSelection()">Cancel</button>
+                                    </div>
+                                </div>
+                                
+                                <!-- Search/Filter -->
+                                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                                    <input type="text" id="question-search" placeholder="Search questions..." 
+                                           class="form-input" style="flex: 1;" 
+                                           oninput="filterQuestions()" />
+                                    <select id="genre-filter" class="form-select" style="width: auto;" onchange="filterQuestions()">
+                                        <option value="">All Genres</option>
+                                        <!-- Options will be populated dynamically -->
+                                    </select>
+                                    <button type="button" class="btn btn-small btn-secondary" onclick="clearFilters()">Clear</button>
+                                </div>
+                                
+                                <div style="margin-top: 0.5rem; font-size: 0.875rem; color: #6b7280;">
+                                    <span id="selection-count">0 questions selected</span> | 
+                                    <span id="visible-count">0 questions visible</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Question List -->
+                            <div id="questions-selector" class="scrollable" style="border: 1px solid #d1d5db; padding: 0.75rem; border-radius: 0.375rem; max-height: 300px;">
+                                <!-- Questions will be populated here -->
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-success w-full">Create Template</button>
+                    </form>
+                </div>
+
+                <div class="card">
+                    <h2 class="card-title">Test Templates</h2>
+                    <div id="templates-list" class="scrollable"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Generated Tests Tab -->
+        <div id="tab-generated" class="tab-content hidden">
+            <div class="card">
+                <div class="flex justify-between items-center" style="margin-bottom: 1rem;">
+                    <h2 class="card-title" style="margin-bottom: 0;">Generated Tests</h2>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button class="btn btn-secondary btn-small" onclick="clearAllGeneratedTests()" title="Clear all generated tests">
+                            Clear All Tests
+                        </button>
+                        <button class="btn btn-primary btn-small" onclick="exportData('generated')" title="Export all generated tests">
+                            Export Tests
+                        </button>
+                    </div>
+                </div>
+                
+                <div style="margin-bottom: 1rem; padding: 0.75rem; background-color: #f0f9ff; border-radius: 0.375rem; border: 1px solid #bae6fd;">
+                    <div style="display: flex; gap: 1rem; align-items: center; font-size: 0.875rem;">
+                        <span><strong>Total Tests:</strong> <span id="total-tests-count">0</span></span>
+                        <span><strong>Templates Used:</strong> <span id="templates-used-count">0</span></span>
+                        <span><strong>Most Recent:</strong> <span id="most-recent-test">None</span></span>
+                    </div>
+                </div>
+                
+                <div style="overflow-x: auto;">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Test</th>
+                                <th>Version</th>
+                                <th>Questions</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="generated-tests-list">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Management Tab -->
+        <div id="tab-data" class="tab-content hidden">
+            <div class="grid grid-2">
+                <div class="card">
+                    <h2 class="card-title">Export Data</h2>
+                    <p class="text-sm" style="margin-bottom: 1rem; color: #6b7280;">
+                        Export all your questions, templates, and generated tests as JSON files. 
+                        These can be imported into the full MongoDB system later.
+                    </p>
+                    <div class="export-import">
+                        <button class="btn btn-primary" onclick="exportData('questions')">Export Questions</button>
+                        <button class="btn btn-primary" onclick="exportData('templates')">Export Templates</button>
+                        <button class="btn btn-primary" onclick="exportData('generated')">Export Generated Tests</button>
+                        <button class="btn btn-success" onclick="exportData('all')">Export All Data</button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2 class="card-title">Import Data</h2>
+                    <p class="text-sm" style="margin-bottom: 1rem; color: #6b7280;">
+                        Import previously exported JSON data. This will merge with existing data.
+                    </p>
+                    <div class="form-group">
+                        <label class="form-label">Select JSON File</label>
+                        <input type="file" id="import-file" class="form-input" accept=".json" onchange="importData()">
+                    </div>
+                    <button class="btn btn-danger" onclick="clearAllData()" style="margin-top: 1rem;">Clear All Data</button>
+                </div>
+            </div>
+
+            <div class="card mt-4">
+                <h2 class="card-title">Data Statistics</h2>
+                <div id="data-stats"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading overlay -->
+    <div id="loading" class="loading hidden">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <div>Processing...</div>
+        </div>
+    </div>
+
+    <script>
+        // Data storage using localStorage
+        class DataStore {
+            constructor() {
+                this.questions = JSON.parse(localStorage.getItem('testgen_questions') || '[]');
+                this.templates = JSON.parse(localStorage.getItem('testgen_templates') || '[]');
+                this.generatedTests = JSON.parse(localStorage.getItem('testgen_generated') || '[]');
+            }
+
+            save() {
+                localStorage.setItem('testgen_questions', JSON.stringify(this.questions));
+                localStorage.setItem('testgen_templates', JSON.stringify(this.templates));
+                localStorage.setItem('testgen_generated', JSON.stringify(this.generatedTests));
+            }
+
+            addQuestion(question) {
+                question._id = uuid.v4();
+                question.createdAt = new Date().toISOString();
+                this.questions.push(question);
+                this.save();
+                return question;
+            }
+
+            updateQuestion(id, updatedQuestion) {
+                const index = this.questions.findIndex(q => q._id === id);
+                if (index !== -1) {
+                    this.questions[index] = { ...this.questions[index], ...updatedQuestion };
+                    this.save();
+                    return this.questions[index];
+                }
+                return null;
+            }
+
+            deleteQuestion(id) {
+                this.questions = this.questions.filter(q => q._id !== id);
+                this.save();
+            }
+
+            addTemplate(template) {
+                template._id = uuid.v4();
+                template.createdAt = new Date().toISOString();
+                this.templates.push(template);
+                this.save();
+                return template;
+            }
+
+            addGeneratedTest(test) {
+                test._id = uuid.v4();
+                test.createdAt = new Date().toISOString();
+                this.generatedTests.push(test);
+                this.save();
+                return test;
+            }
+        }
+
+        // Global variables
+        let dataStore = new DataStore();
+        let editingQuestionId = null;
+        let currentImages = {}; // Store base64 images
+
+        // Initialize the app
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeQuestionForm();
+            renderQuestionsLibrary();
+            renderQuestionsSelector();
+            renderTemplatesList();
+            renderGeneratedTestsList();
+            updateDataStats();
+            
+            // Add event listeners
+            document.getElementById('question-form').addEventListener('submit', handleQuestionSubmit);
+            document.getElementById('template-form').addEventListener('submit', handleTemplateSubmit);
+            document.getElementById('baseId').addEventListener('input', updateQuestionId);
+            document.getElementById('variant').addEventListener('input', updateQuestionId);
+        });
+
+        // Tab functionality
+        function showTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.add('hidden');
+            });
+            
+            // Remove active class from all tab buttons
+            document.querySelectorAll('.tab').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Show selected tab
+            document.getElementById(`tab-${tabName}`).classList.remove('hidden');
+            
+            // Add active class to clicked tab button
+            event.target.classList.add('active');
+            
+            // Refresh data when switching tabs
+            if (tabName === 'questions') {
+                renderQuestionsLibrary();
+                renderQuestionsSelector();
+            } else if (tabName === 'templates') {
+                renderTemplatesList();
+                renderQuestionsSelector();
+            } else if (tabName === 'generated') {
+                renderGeneratedTestsList();
+            } else if (tabName === 'data') {
+                updateDataStats();
+            }
+        }
+
+        // Question form functions
+        function updateQuestionId() {
+            const baseId = document.getElementById('baseId').value;
+            const variant = document.getElementById('variant').value;
+            document.getElementById('questionId').value = baseId + variant;
+        }
+
+        function toggleQuestionType() {
+            const type = document.getElementById('questionType').value;
+            const mcSection = document.getElementById('multiple-choice-section');
+            const saSection = document.getElementById('short-answer-section');
+            
+            if (type === 'multiple-choice') {
+                mcSection.classList.remove('hidden');
+                saSection.classList.add('hidden');
+            } else {
+                mcSection.classList.add('hidden');
+                saSection.classList.remove('hidden');
+            }
+        }
+
+        function initializeQuestionForm() {
+            generateOptionsHTML();
+            toggleQuestionType();
+        }
+
+        function generateOptionsHTML() {
+            const container = document.getElementById('options-container');
+            const letters = ['A', 'B', 'C', 'D'];
+            
+            container.innerHTML = '';
+            
+            letters.forEach((letter, index) => {
+                const optionDiv = document.createElement('div');
+                optionDiv.className = 'option-item';
+                optionDiv.innerHTML = `
+                    <div class="option-header">
+                        <span style="font-weight: 500;">${letter}.</span>
+                        <input type="checkbox" id="correct-${index}" onchange="handleCorrectAnswer(${index})">
+                        <label for="correct-${index}" class="text-sm" style="color: #6b7280;">Correct Answer</label>
+                    </div>
+                    <div class="format-toolbar">
+                        <button type="button" class="format-btn" onclick="formatText('option-${index}', 'bold')"><b>B</b></button>
+                        <button type="button" class="format-btn" onclick="formatText('option-${index}', 'underline')"><u>U</u></button>
+                    </div>
+                    <textarea id="option-${index}" class="form-textarea" oninput="updatePreview('option-${index}', 'option-preview-${index}')"></textarea>
+                    <div class="preview">Preview: <span id="option-preview-${index}"></span></div>
+                    <input type="file" class="form-input" accept="image/*" onchange="handleImageUpload('option-${index}-image')" style="margin-top: 0.5rem;">
+                `;
+                container.appendChild(optionDiv);
+            });
+        }
+
+        function handleCorrectAnswer(index) {
+            // Uncheck all other options
+            for (let i = 0; i < 4; i++) {
+                if (i !== index) {
+                    document.getElementById(`correct-${i}`).checked = false;
+                }
+            }
+        }
+
+        // Text formatting functions
+        function formatText(textareaId, format) {
+            const textarea = document.getElementById(textareaId);
+            const start = textarea.selectionStart;
+            const end = textarea.selectionEnd;
+            const selectedText = textarea.value.substring(start, end);
+            
+            if (selectedText) {
+                const tag = format === 'bold' ? 'b' : 'u';
+                const formattedText = `<${tag}>${selectedText}</${tag}>`;
+                const newValue = textarea.value.substring(0, start) + formattedText + textarea.value.substring(end);
+                textarea.value = newValue;
+                
+                // Update preview
+                const previewId = textareaId.replace('option-', 'option-preview-').replace('questionText', 'questionPreview');
+                updatePreview(textareaId, previewId);
+            }
+        }
+
+        function updatePreview(textareaId, previewId) {
+            const textarea = document.getElementById(textareaId);
+            const preview = document.getElementById(previewId);
+            if (preview) {
+                preview.innerHTML = textarea.value;
+            }
+        }
+
+        // Image handling
+        function handleImageUpload(inputId) {
+            const input = document.getElementById(inputId) || event.target;
+            const file = input.files[0];
+            
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    currentImages[inputId] = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        // Question CRUD operations
+        function handleQuestionSubmit(e) {
+            e.preventDefault();
+            showLoading(true);
+            
+            setTimeout(() => {
+                const formData = {
+                    questionId: document.getElementById('questionId').value,
+                    baseId: document.getElementById('baseId').value,
+                    variant: document.getElementById('variant').value,
+                    genre: document.getElementById('genre').value,
+                    type: document.getElementById('questionType').value,
+                    questionText: document.getElementById('questionText').value,
+                    questionImage: currentImages['questionImage'] || null,
+                };
+                
+                if (formData.type === 'multiple-choice') {
+                    formData.options = [];
+                    for (let i = 0; i < 4; i++) {
+                        formData.options.push({
+                            text: document.getElementById(`option-${i}`).value,
+                            image: currentImages[`option-${i}-image`] || null,
+                            isCorrect: document.getElementById(`correct-${i}`).checked
+                        });
+                    }
+                } else {
+                    formData.correctAnswer = document.getElementById('correctAnswer').value;
+                }
+                
+                if (editingQuestionId) {
+                    dataStore.updateQuestion(editingQuestionId, formData);
+                    editingQuestionId = null;
+                    document.getElementById('question-form-title').textContent = 'Add New Question';
+                    document.getElementById('cancel-edit-btn').classList.add('hidden');
+                    document.getElementById('submit-btn-text').textContent = 'Create Question';
+                } else {
+                    dataStore.addQuestion(formData);
+                }
+                
+                resetQuestionForm();
+                renderQuestionsLibrary();
+                renderQuestionsSelector();
+                showLoading(false);
+            }, 500);
+        }
+
+        function resetQuestionForm() {
+            document.getElementById('question-form').reset();
+            currentImages = {};
+            generateOptionsHTML();
+            document.getElementById('questionId').value = '';
+            document.querySelectorAll('.preview span').forEach(span => span.innerHTML = '');
+        }
+
+        function editQuestion(id) {
+            const question = dataStore.questions.find(q => q._id === id);
+            if (!question) return;
+            
+            editingQuestionId = id;
+            document.getElementById('question-form-title').textContent = 'Edit Question';
+            document.getElementById('cancel-edit-btn').classList.remove('hidden');
+            document.getElementById('submit-btn-text').textContent = 'Update Question';
+            
+            // Fill form
+            document.getElementById('baseId').value = question.baseId;
+            document.getElementById('variant').value = question.variant;
+            document.getElementById('questionId').value = question.questionId;
+            document.getElementById('genre').value = question.genre;
+            document.getElementById('questionType').value = question.type;
+            document.getElementById('questionText').value = question.questionText;
+            
+            if (question.questionImage) {
+                currentImages['questionImage'] = question.questionImage;
+            }
+            
+            toggleQuestionType();
+            
+            if (question.type === 'multiple-choice') {
+                question.options.forEach((option, index) => {
+                    document.getElementById(`option-${index}`).value = option.text;
+                    document.getElementById(`correct-${index}`).checked = option.isCorrect;
+                    if (option.image) {
+                        currentImages[`option-${index}-image`] = option.image;
+                    }
+                });
+            } else {
+                document.getElementById('correctAnswer').value = question.correctAnswer || '';
+            }
+            
+            // Update previews
+            updatePreview('questionText', 'questionPreview');
+            for (let i = 0; i < 4; i++) {
+                updatePreview(`option-${i}`, `option-preview-${i}`);
+            }
+        }
+
+        function cancelEdit() {
+            editingQuestionId = null;
+            document.getElementById('question-form-title').textContent = 'Add New Question';
+            document.getElementById('cancel-edit-btn').classList.add('hidden');
+            document.getElementById('submit-btn-text').textContent = 'Create Question';
+            resetQuestionForm();
+        }
+
+        function deleteQuestion(id) {
+            if (confirm('Are you sure you want to delete this question?')) {
+                dataStore.deleteQuestion(id);
+                renderQuestionsLibrary();
+                renderQuestionsSelector();
+            }
+        }
+
+        // Template functions
+        function handleTemplateSubmit(e) {
+            e.preventDefault();
+            showLoading(true);
+            
+            setTimeout(() => {
+                const selectedQuestions = [];
+                document.querySelectorAll('#questions-selector input:checked').forEach(checkbox => {
+                    selectedQuestions.push(checkbox.value);
+                });
+                
+                if (selectedQuestions.length === 0) {
+                    alert('Please select at least one question for the template.');
+                    showLoading(false);
+                    return;
+                }
+                
+                const templateData = {
+                    title: document.getElementById('templateTitle').value,
+                    header: document.getElementById('templateHeader').value || '',
+                    instructions: document.getElementById('templateInstructions').value || '',
+                    questions: selectedQuestions
+                };
+                
+                console.log('Template data:', templateData); // Debug log
+                
+                dataStore.addTemplate(templateData);
+                
+                // Clear form
+                document.getElementById('template-form').reset();
+                // Uncheck all questions
+                document.querySelectorAll('#questions-selector input:checked').forEach(checkbox => {
+                    checkbox.checked = false;
+                });
+                
+                renderTemplatesList();
+                renderQuestionsSelector();
+                showLoading(false);
+                alert('Template created successfully!');
+            }, 500);
+        }
+
+        function generateTests(templateId, numberOfTests) {
+            const template = dataStore.templates.find(t => t._id === templateId);
+            if (!template) return;
+            
+            showLoading(true);
+            
+            setTimeout(() => {
+                // Group questions by base ID
+                const questionGroups = {};
+                template.questions.forEach(qId => {
+                    const question = dataStore.questions.find(q => q._id === qId);
+                    if (question) {
+                        if (!questionGroups[question.baseId]) {
+                            questionGroups[question.baseId] = [];
+                        }
+                        questionGroups[question.baseId].push(question);
+                    }
+                });
+                
+                // Sort base IDs to ensure consistent ordering
+                const sortedBaseIds = Object.keys(questionGroups).sort((a, b) => {
+                    const numA = parseInt(a) || 0;
+                    const numB = parseInt(b) || 0;
+                    return numA - numB;
+                });
+                
+                // Create systematic distribution for each test
+                for (let testIndex = 0; testIndex < numberOfTests; testIndex++) {
+                    const testQuestions = [];
+                    
+                    // For each base question group, systematically select variants
+                    sortedBaseIds.forEach(baseId => {
+                        const variants = questionGroups[baseId];
+                        
+                        // Systematic selection: distribute variants evenly across tests
+                        let selectedQuestion;
+                        
+                        if (variants.length >= numberOfTests) {
+                            // If we have enough variants, use one per test systematically
+                            selectedQuestion = variants[testIndex % variants.length];
+                        } else {
+                            // If we have fewer variants than tests, distribute as evenly as possible
+                            // Use a distribution algorithm that spreads variants across tests
+                            const variantIndex = Math.floor((testIndex * variants.length) / numberOfTests);
+                            selectedQuestion = variants[variantIndex];
+                        }
+                        
+                        testQuestions.push({
+                            questionId: selectedQuestion.questionId,
+                            questionText: selectedQuestion.questionText,
+                            questionImage: selectedQuestion.questionImage,
+                            type: selectedQuestion.type,
+                            options: selectedQuestion.options,
+                            correctAnswer: selectedQuestion.correctAnswer
+                        });
+                    });
+                    
+                    // Sort questions by base ID for consistent ordering
+                    testQuestions.sort((a, b) => {
+                        const aBase = parseInt(a.questionId.replace(/[a-z]/g, ''));
+                        const bBase = parseInt(b.questionId.replace(/[a-z]/g, ''));
+                        return aBase - bBase;
+                    });
+                    
+                    const generatedTest = {
+                        templateId: templateId,
+                        testNumber: testIndex + 1,
+                        title: template.title,
+                        header: template.header,
+                        instructions: template.instructions,
+                        questions: testQuestions
+                    };
+                    
+                    dataStore.addGeneratedTest(generatedTest);
+                }
+                
+                renderGeneratedTestsList();
+                updateGeneratedTestsStats();
+                showLoading(false);
+                
+                // Show detailed generation summary
+                showTestGenerationSummary(questionGroups, numberOfTests);
+            }, 1000);
+        }
+        
+        function showTestGenerationSummary(questionGroups, numberOfTests) {
+            let summary = `✅ Generated ${numberOfTests} tests successfully!\n\n`;
+            summary += `📊 VARIANT DISTRIBUTION:\n`;
+            summary += `${'='.repeat(40)}\n`;
+            
+            const sortedBaseIds = Object.keys(questionGroups).sort((a, b) => {
+                const numA = parseInt(a) || 0;
+                const numB = parseInt(b) || 0;
+                return numA - numB;
+            });
+            
+            sortedBaseIds.forEach(baseId => {
+                const variants = questionGroups[baseId];
+                summary += `\nQuestion ${baseId} (${variants.length} variants available):\n`;
+                
+                // Show which variant goes to which test
+                for (let testIndex = 0; testIndex < numberOfTests; testIndex++) {
+                    let selectedVariant;
+                    
+                    if (variants.length >= numberOfTests) {
+                        selectedVariant = variants[testIndex % variants.length];
+                    } else {
+                        const variantIndex = Math.floor((testIndex * variants.length) / numberOfTests);
+                        selectedVariant = variants[variantIndex];
+                    }
+                    
+                    summary += `  Test ${testIndex + 1}: ${selectedVariant.questionId}\n`;
+                }
+            });
+            
+            summary += `\n${'='.repeat(40)}\n`;
+            summary += `💡 TIP: Each test gets different variants systematically!\n`;
+            summary += `Download PDFs from the Generated Tests tab.`;
+            
+            alert(summary);
+        }
+
+        // PDF Generation using jsPDF with image support
+        function downloadTest(testId, type = 'test') {
+            const test = dataStore.generatedTests.find(t => t._id === testId);
+            if (!test) return;
+            
+            showLoading(true);
+            
+            setTimeout(() => {
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                
+                let yPosition = 20;
+                
+                // Title
+                doc.setFontSize(18);
+                doc.setFont(undefined, 'bold');
+                doc.text(test.title, 105, yPosition, { align: 'center' });
+                yPosition += 12;
+                
+                // Header information
+                if (test.header && test.header.trim()) {
+                    doc.setFontSize(12);
+                    doc.setFont(undefined, 'normal');
+                    const headerLines = doc.splitTextToSize(test.header, 170);
+                    doc.text(headerLines, 105, yPosition, { align: 'center' });
+                    yPosition += headerLines.length * 6 + 5;
+                }
+                
+                // Test version
+                doc.setFontSize(12);
+                doc.setFont(undefined, 'bold');
+                doc.text(`Test Version ${test.testNumber}`, 105, yPosition, { align: 'center' });
+                yPosition += 8;
+                
+                // Answer key label
+                if (type === 'answer-key') {
+                    doc.setFontSize(14);
+                    doc.setFont(undefined, 'bold');
+                    doc.text('ANSWER KEY', 105, yPosition, { align: 'center' });
+                    yPosition += 10;
+                }
+                
+                // Instructions
+                if (test.instructions && test.instructions.trim() && type === 'test') {
+                    doc.setFontSize(10);
+                    doc.setFont(undefined, 'normal');
+                    doc.text('Instructions:', 20, yPosition);
+                    yPosition += 6;
+                    const instructions = doc.splitTextToSize(test.instructions, 170);
+                    doc.text(instructions, 20, yPosition);
+                    yPosition += instructions.length * 5 + 10;
+                }
+                
+                yPosition += 5; // Extra space before questions
+                
+                // Process questions with images
+                processQuestionsForPDF(doc, test.questions, yPosition, type).then(() => {
+                    // Generate filename
+                    const safeTitle = test.title.replace(/[^a-zA-Z0-9]/g, '_');
+                    const filename = type === 'answer-key' 
+                        ? `${safeTitle}_v${test.testNumber}_AnswerKey.pdf`
+                        : `${safeTitle}_v${test.testNumber}_Test.pdf`;
+                        
+                    doc.save(filename);
+                    showLoading(false);
+                }).catch(error => {
+                    console.error('Error generating PDF:', error);
+                    showLoading(false);
+                    alert('Error generating PDF. Please try again.');
+                });
+            }, 500);
+        }
+        
+        // Helper function to process questions with image support and proper formatting
+        async function processQuestionsForPDF(doc, questions, startY, type) {
+            let yPosition = startY;
+            
+            for (let questionIndex = 0; questionIndex < questions.length; questionIndex++) {
+                const question = questions[questionIndex];
+                
+                // Check if we need a new page
+                if (yPosition > 240) {
+                    doc.addPage();
+                    yPosition = 20;
+                }
+                
+                // Question number
+                doc.setFontSize(12);
+                doc.setFont(undefined, 'bold');
+                const questionNum = `${questionIndex + 1}. `;
+                doc.text(questionNum, 20, yPosition);
+                
+                // Question text with formatting
+                doc.setFontSize(12);
+                const questionResult = addFormattedTextToPDF(doc, question.questionText, 30, yPosition, 160);
+                yPosition = questionResult.finalY + 3;
+                
+                // Add question image if it exists
+                if (question.questionImage && question.questionImage.startsWith('data:image/')) {
+                    try {
+                        const imgData = await loadImageForPDF(question.questionImage);
+                        if (imgData) {
+                            // Check if we need a new page for the image
+                            if (yPosition + 60 > 280) {
+                                doc.addPage();
+                                yPosition = 20;
+                            }
+                            
+                            const imgWidth = Math.min(imgData.width, 120);
+                            const imgHeight = (imgData.height * imgWidth) / imgData.width;
+                            const maxHeight = 60;
+                            const finalHeight = Math.min(imgHeight, maxHeight);
+                            const finalWidth = (imgData.width * finalHeight) / imgData.height;
+                            
+                            doc.addImage(question.questionImage, 'JPEG', 30, yPosition, finalWidth, finalHeight);
+                            yPosition += finalHeight + 8;
+                        }
+                    } catch (error) {
+                        console.warn('Could not add question image:', error);
+                    }
+                }
+                
+                // Handle answer options
+                if (question.type === 'multiple-choice') {
+                    for (let optIndex = 0; optIndex < question.options.length; optIndex++) {
+                        const option = question.options[optIndex];
+                        
+                        // Check if we need a new page
+                        if (yPosition > 270) {
+                            doc.addPage();
+                            yPosition = 20;
+                        }
+                        
+                        const letter = String.fromCharCode(65 + optIndex);
+                        
+                        if (type === 'answer-key') {
+                            if (option.isCorrect) {
+                                // Show correct answer with formatting and checkmark
+                                doc.setFontSize(11);
+                                doc.setFont(undefined, 'bold');
+                                doc.text(`${letter}. `, 30, yPosition);
+                                
+                                // Add formatted option text
+                                const optionResult = addFormattedTextToPDF(doc, option.text, 42, yPosition, 140);
+                                
+                                // Add checkmark
+                                doc.setFont(undefined, 'bold');
+                                doc.text(' ✓', 42 + doc.getTextWidth(option.text.replace(/<[^>]*>/g, '')), yPosition);
+                                
+                                yPosition = optionResult.finalY + 3;
+                                
+                                // Add option image if it exists and is correct answer
+                                if (option.image && option.image.startsWith('data:image/')) {
+                                    try {
+                                        const imgData = await loadImageForPDF(option.image);
+                                        if (imgData) {
+                                            if (yPosition + 40 > 280) {
+                                                doc.addPage();
+                                                yPosition = 20;
+                                            }
+                                            
+                                            const imgWidth = Math.min(imgData.width, 80);
+                                            const imgHeight = (imgData.height * imgWidth) / imgData.width;
+                                            const maxHeight = 40;
+                                            const finalHeight = Math.min(imgHeight, maxHeight);
+                                            const finalWidth = (imgData.width * finalHeight) / imgData.height;
+                                            
+                                            doc.addImage(option.image, 'JPEG', 45, yPosition, finalWidth, finalHeight);
+                                            yPosition += finalHeight + 5;
+                                        }
+                                    } catch (error) {
+                                        console.warn('Could not add option image:', error);
+                                    }
+                                }
+                            }
+                        } else {
+                            // For regular test, show all options with formatting
+                            doc.setFontSize(11);
+                            doc.setFont(undefined, 'normal');
+                            doc.text(`${letter}. `, 30, yPosition);
+                            
+                            // Add formatted option text
+                            const optionResult = addFormattedTextToPDF(doc, option.text, 42, yPosition, 140);
+                            yPosition = optionResult.finalY + 2;
+                            
+                            // Add option image if it exists
+                            if (option.image && option.image.startsWith('data:image/')) {
+                                try {
+                                    const imgData = await loadImageForPDF(option.image);
+                                    if (imgData) {
+                                        if (yPosition + 30 > 280) {
+                                            doc.addPage();
+                                            yPosition = 20;
+                                        }
+                                        
+                                        const imgWidth = Math.min(imgData.width, 60);
+                                        const imgHeight = (imgData.height * imgWidth) / imgData.width;
+                                        const maxHeight = 30;
+                                        const finalHeight = Math.min(imgHeight, maxHeight);
+                                        const finalWidth = (imgData.width * finalHeight) / imgData.height;
+                                        
+                                        doc.addImage(option.image, 'JPEG', 45, yPosition, finalWidth, finalHeight);
+                                        yPosition += finalHeight + 3;
+                                    }
+                                } catch (error) {
+                                    console.warn('Could not add option image:', error);
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Short answer question
+                    if (type === 'answer-key') {
+                        doc.setFontSize(11);
+                        doc.setFont(undefined, 'bold');
+                        doc.text('Answer: ', 30, yPosition);
+                        
+                        // Add formatted answer text
+                        const answerText = question.correctAnswer || 'No answer provided';
+                        const answerResult = addFormattedTextToPDF(doc, answerText, 55, yPosition, 125);
+                        yPosition = answerResult.finalY + 5;
+                    } else {
+                        // Add answer lines for short answer
+                        doc.setFontSize(11);
+                        doc.setFont(undefined, 'normal');
+                        doc.text('Answer:', 30, yPosition);
+                        yPosition += 8;
+                        for (let j = 0; j < 3; j++) {
+                            doc.line(30, yPosition + 2, 180, yPosition + 2);
+                            yPosition += 8;
+                        }
+                    }
+                }
+                
+                yPosition += 8; // Space between questions
+            }
+        }
+        
+        // Helper function to load and validate images for PDF
+        function loadImageForPDF(base64String) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = function() {
+                    resolve({
+                        width: this.width,
+                        height: this.height,
+                        data: base64String
+                    });
+                };
+                img.onerror = function() {
+                    reject(new Error('Could not load image'));
+                };
+                img.src = base64String;
+            });
+        }
+        
+        // Helper function to process formatted text for PDF
+        function addFormattedTextToPDF(doc, text, x, y, maxWidth = 160) {
+            if (!text) return { finalY: y, lines: 0 };
+            
+            // Parse the text for formatting tags
+            const segments = parseFormattedText(text);
+            const lineHeight = 5;
+            let currentY = y;
+            let currentX = x;
+            const lines = [];
+            let currentLine = [];
+            let currentLineWidth = 0;
+            
+            segments.forEach(segment => {
+                const words = segment.text.split(' ');
+                
+                words.forEach((word, wordIndex) => {
+                    if (wordIndex > 0) word = ' ' + word; // Add space back except for first word
+                    
+                    const wordWidth = getTextWidth(doc, word, segment.bold, segment.underline);
+                    
+                    // Check if word fits on current line
+                    if (currentLineWidth + wordWidth > maxWidth && currentLine.length > 0) {
+                        // Start new line
+                        lines.push([...currentLine]);
+                        currentLine = [{ text: word.trim(), bold: segment.bold, underline: segment.underline }];
+                        currentLineWidth = getTextWidth(doc, word.trim(), segment.bold, segment.underline);
+                    } else {
+                        // Add to current line
+                        if (currentLine.length > 0 && word.startsWith(' ')) {
+                            currentLine.push({ text: word, bold: segment.bold, underline: segment.underline });
+                        } else {
+                            currentLine.push({ text: word.trim(), bold: segment.bold, underline: segment.underline });
+                        }
+                        currentLineWidth += wordWidth;
+                    }
+                });
+            });
+            
+            // Add the last line
+            if (currentLine.length > 0) {
+                lines.push(currentLine);
+            }
+            
+            // Render all lines
+            lines.forEach(line => {
+                currentX = x;
+                line.forEach(segment => {
+                    // Set font style
+                    if (segment.bold) {
+                        doc.setFont(undefined, 'bold');
+                    } else {
+                        doc.setFont(undefined, 'normal');
+                    }
+                    
+                    // Add text
+                    doc.text(segment.text, currentX, currentY);
+                    
+                    // Add underline if needed
+                    if (segment.underline) {
+                        const textWidth = doc.getTextWidth(segment.text);
+                        doc.line(currentX, currentY + 1, currentX + textWidth, currentY + 1);
+                    }
+                    
+                    // Move x position
+                    currentX += doc.getTextWidth(segment.text);
+                });
+                currentY += lineHeight;
+            });
+            
+            return { finalY: currentY, lines: lines.length };
+        }
+        
+        function parseFormattedText(text) {
+            const segments = [];
+            let currentIndex = 0;
+            
+            // Regular expression to find formatting tags
+            const formatRegex = /<(b|u)>(.*?)<\/\1>/g;
+            let match;
+            
+            while ((match = formatRegex.exec(text)) !== null) {
+                // Add text before the tag
+                if (match.index > currentIndex) {
+                    const beforeText = text.substring(currentIndex, match.index);
+                    if (beforeText) {
+                        segments.push({ text: beforeText, bold: false, underline: false });
+                    }
+                }
+                
+                // Add the formatted text
+                const tag = match[1];
+                const content = match[2];
+                if (content) {
+                    segments.push({
+                        text: content,
+                        bold: tag === 'b',
+                        underline: tag === 'u'
+                    });
+                }
+                
+                currentIndex = formatRegex.lastIndex;
+            }
+            
+            // Add remaining text
+            if (currentIndex < text.length) {
+                const remainingText = text.substring(currentIndex);
+                if (remainingText) {
+                    segments.push({ text: remainingText, bold: false, underline: false });
+                }
+            }
+            
+            // If no formatting found, return the whole text
+            if (segments.length === 0) {
+                segments.push({ text: text, bold: false, underline: false });
+            }
+            
+            return segments;
+        }
+        
+        function getTextWidth(doc, text, bold = false, underline = false) {
+            const currentFont = doc.internal.getFont().fontName;
+            const fontStyle = bold ? 'bold' : 'normal';
+            doc.setFont(currentFont, fontStyle);
+            const width = doc.getTextWidth(text);
+            return width;
+        }
+
+        // Render functions
+        function renderQuestionsLibrary() {
+            const container = document.getElementById('questions-list');
+            const groupedQuestions = {};
+            
+            dataStore.questions.forEach(question => {
+                if (!groupedQuestions[question.baseId]) {
+                    groupedQuestions[question.baseId] = [];
+                }
+                groupedQuestions[question.baseId].push(question);
+            });
+            
+            container.innerHTML = '';
+            
+            Object.entries(groupedQuestions).forEach(([baseId, questionGroup]) => {
+                const groupDiv = document.createElement('div');
+                groupDiv.className = 'question-item';
+                
+                let groupHTML = `
+                    <h3 style="font-weight: 600; font-size: 1.125rem; margin-bottom: 0.5rem;">Question ${baseId}</h3>
+                `;
+                
+                questionGroup.forEach(question => {
+                    const questionText = question.questionText.length > 100 
+                        ? question.questionText.substring(0, 100) + '...'
+                        : question.questionText;
+                        
+                    groupHTML += `
+                        <div style="background-color: #f9fafb; padding: 0.75rem; border-radius: 0.375rem; margin-bottom: 0.5rem;">
+                            <div class="question-badges">
+                                <span class="badge badge-blue">${question.questionId}</span>
+                                <span class="badge badge-green">${question.genre}</span>
+                                <span class="badge badge-purple">${question.type}</span>
+                            </div>
+                            <p style="font-size: 0.875rem; color: #374151;">${questionText.replace(/<[^>]*>/g, '')}</p>
+                            <div class="question-actions">
+                                <button class="btn btn-small btn-primary" onclick="editQuestion('${question._id}')">Edit</button>
+                                <button class="btn btn-small btn-success" onclick="duplicateQuestion('${question._id}')" title="Duplicate this question">Duplicate</button>
+                                <button class="btn btn-small btn-danger" onclick="deleteQuestion('${question._id}')">Delete</button>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                groupDiv.innerHTML = groupHTML;
+                container.appendChild(groupDiv);
+            });
+        }
+
+        function renderQuestionsSelector() {
+            const container = document.getElementById('questions-selector');
+            container.innerHTML = '';
+            
+            if (dataStore.questions.length === 0) {
+                container.innerHTML = '<p style="color: #6b7280; text-align: center; padding: 1rem;">No questions available. Create some questions first!</p>';
+                return;
+            }
+            
+            // Group questions by base ID for better organization
+            const groupedQuestions = {};
+            dataStore.questions.forEach(question => {
+                if (!groupedQuestions[question.baseId]) {
+                    groupedQuestions[question.baseId] = [];
+                }
+                groupedQuestions[question.baseId].push(question);
+            });
+            
+            // Sort base IDs numerically
+            const sortedBaseIds = Object.keys(groupedQuestions).sort((a, b) => {
+                const numA = parseInt(a) || 0;
+                const numB = parseInt(b) || 0;
+                return numA - numB;
+            });
+            
+            sortedBaseIds.forEach(baseId => {
+                const questions = groupedQuestions[baseId];
+                
+                // Create group container
+                const groupDiv = document.createElement('div');
+                groupDiv.className = 'question-group';
+                groupDiv.style.marginBottom = '1rem';
+                groupDiv.style.border = '1px solid #e5e7eb';
+                groupDiv.style.borderRadius = '0.375rem';
+                groupDiv.style.padding = '0.75rem';
+                groupDiv.style.backgroundColor = '#fafafa';
+                
+                // Group header with select all for this base ID
+                const headerDiv = document.createElement('div');
+                headerDiv.style.display = 'flex';
+                headerDiv.style.justifyContent = 'space-between';
+                headerDiv.style.alignItems = 'center';
+                headerDiv.style.marginBottom = '0.5rem';
+                headerDiv.innerHTML = `
+                    <h4 style="font-weight: 600; color: #374151; margin: 0;">Question ${baseId} (${questions.length} variants)</h4>
+                    <div style="display: flex; gap: 0.25rem;">
+                        <button type="button" class="btn btn-small btn-primary" onclick="selectBaseQuestions('${baseId}', true)">All</button>
+                        <button type="button" class="btn btn-small btn-secondary" onclick="selectBaseQuestions('${baseId}', false)">None</button>
+                        <button type="button" class="btn btn-small btn-success" onclick="selectOneFromBase('${baseId}')">Pick One</button>
+                    </div>
+                `;
+                groupDiv.appendChild(headerDiv);
+                
+                // Individual question checkboxes
+                questions.forEach(question => {
+                    const questionDiv = document.createElement('div');
+                    questionDiv.className = 'question-item-selector';
+                    questionDiv.setAttribute('data-genre', question.genre.toLowerCase());
+                    questionDiv.setAttribute('data-text', (question.questionText + ' ' + question.genre).toLowerCase());
+                    questionDiv.style.marginBottom = '0.5rem';
+                    questionDiv.style.padding = '0.5rem';
+                    questionDiv.style.backgroundColor = 'white';
+                    questionDiv.style.borderRadius = '0.25rem';
+                    questionDiv.style.border = '1px solid #e5e7eb';
+                    
+                    const questionText = question.questionText.replace(/<[^>]*>/g, '').substring(0, 80);
+                    const displayText = questionText.length > 80 ? questionText + '...' : questionText;
+                    
+                    questionDiv.innerHTML = `
+                        <label style="display: flex; align-items: flex-start; cursor: pointer; width: 100%;">
+                            <input type="checkbox" value="${question._id}" 
+                                   style="margin-right: 0.5rem; margin-top: 0.25rem; flex-shrink: 0;"
+                                   onchange="updateSelectionCount()">
+                            <div style="flex: 1; min-width: 0;">
+                                <div style="display: flex; gap: 0.25rem; margin-bottom: 0.25rem;">
+                                    <span class="badge badge-blue" style="font-size: 0.75rem;">${question.questionId}</span>
+                                    <span class="badge badge-green" style="font-size: 0.75rem;">${question.genre}</span>
+                                    <span class="badge badge-purple" style="font-size: 0.75rem;">${question.type}</span>
+                                </div>
+                                <span style="font-size: 0.875rem; color: #374151; line-height: 1.3;">
+                                    ${displayText}
+                                </span>
+                            </div>
+                        </label>
+                    `;
+                    
+                    groupDiv.appendChild(questionDiv);
+                });
+                
+                container.appendChild(groupDiv);
+            });
+            
+            // Populate genre filter dropdown
+            populateGenreFilters();
+            updateSelectionCount();
+        }
+
+        function duplicateQuestion(questionId) {
+            const originalQuestion = dataStore.questions.find(q => q._id === questionId);
+            if (!originalQuestion) return;
+            
+            // Show duplication options dialog
+            showDuplicationDialog(originalQuestion);
+        }
+        
+        function showDuplicationDialog(originalQuestion) {
+            const dialogHtml = `
+                <div id="duplication-modal" style="
+                    position: fixed; 
+                    top: 0; 
+                    left: 0; 
+                    width: 100%; 
+                    height: 100%; 
+                    background-color: rgba(0, 0, 0, 0.5); 
+                    z-index: 1000;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                ">
+                    <div style="
+                        background: white; 
+                        padding: 2rem; 
+                        border-radius: 0.5rem; 
+                        max-width: 500px;
+                        width: 90%;
+                        max-height: 80vh;
+                        overflow-y: auto;
+                    ">
+                        <h3 style="margin-bottom: 1rem; font-size: 1.25rem; font-weight: 600;">
+                            Duplicate Question: ${originalQuestion.questionId}
+                        </h3>
+                        
+                        <div style="margin-bottom: 1rem; padding: 1rem; background-color: #f3f4f6; border-radius: 0.375rem;">
+                            <p style="font-size: 0.875rem; color: #374151; margin-bottom: 0.5rem;">
+                                <strong>Original:</strong> ${originalQuestion.questionText.replace(/<[^>]*>/g, '').substring(0, 100)}...
+                            </p>
+                            <p style="font-size: 0.875rem; color: #6b7280;">
+                                Genre: ${originalQuestion.genre} | Type: ${originalQuestion.type}
+                            </p>
+                        </div>
+                        
+                        <div style="margin-bottom: 1rem;">
+                            <h4 style="font-weight: 600; margin-bottom: 0.5rem;">Duplication Options:</h4>
+                            
+                            <div style="margin-bottom: 0.75rem;">
+                                <label style="display: flex; align-items: center; cursor: pointer;">
+                                    <input type="radio" name="duplicateType" value="nextVariant" checked style="margin-right: 0.5rem;">
+                                    <span style="font-size: 0.875rem;">
+                                        <strong>Next Variant</strong> - Create ${originalQuestion.baseId}${getNextVariant(originalQuestion.baseId)} 
+                                        (recommended for similar questions)
+                                    </span>
+                                </label>
+                            </div>
+                            
+                            <div style="margin-bottom: 0.75rem;">
+                                <label style="display: flex; align-items: center; cursor: pointer;">
+                                    <input type="radio" name="duplicateType" value="newBase" style="margin-right: 0.5rem;">
+                                    <span style="font-size: 0.875rem;">
+                                        <strong>New Question</strong> - Create ${getNextBaseId()}a 
+                                        (for completely different question)
+                                    </span>
+                                </label>
+                            </div>
+                            
+                            <div style="margin-bottom: 0.75rem;">
+                                <label style="display: flex; align-items: center; cursor: pointer;">
+                                    <input type="radio" name="duplicateType" value="custom" style="margin-right: 0.5rem;">
+                                    <span style="font-size: 0.875rem;">
+                                        <strong>Custom ID</strong> - Specify your own question ID
+                                    </span>
+                                </label>
+                            </div>
+                            
+                            <div id="customIdSection" style="margin-left: 1.5rem; display: none;">
+                                <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                                    <input type="text" id="customBaseId" placeholder="Base ID" 
+                                           style="flex: 1; padding: 0.25rem; border: 1px solid #d1d5db; border-radius: 0.25rem;">
+                                    <input type="text" id="customVariant" placeholder="Variant" 
+                                           style="flex: 1; padding: 0.25rem; border: 1px solid #d1d5db; border-radius: 0.25rem;">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div style="margin-bottom: 1rem;">
+                            <label style="display: flex; align-items: center; cursor: pointer;">
+                                <input type="checkbox" id="modifyAfterDuplicate" checked style="margin-right: 0.5rem;">
+                                <span style="font-size: 0.875rem;">
+                                    Load in editor for modification (recommended)
+                                </span>
+                            </label>
+                        </div>
+                        
+                        <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                            <button class="btn btn-secondary" onclick="closeDuplicationDialog()">Cancel</button>
+                            <button class="btn btn-primary" onclick="performDuplication('${originalQuestion._id}')">
+                                Duplicate Question
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.insertAdjacentHTML('beforeend', dialogHtml);
+            
+            // Add event listener for custom ID option
+            document.querySelector('input[value="custom"]').addEventListener('change', function() {
+                document.getElementById('customIdSection').style.display = this.checked ? 'block' : 'none';
+            });
+            
+            document.querySelectorAll('input[name="duplicateType"]').forEach(radio => {
+                radio.addEventListener('change', function() {
+                    document.getElementById('customIdSection').style.display = 
+                        this.value === 'custom' ? 'block' : 'none';
+                });
+            });
+        }
+        
+        function getNextVariant(baseId) {
+            const existingVariants = dataStore.questions
+                .filter(q => q.baseId === baseId)
+                .map(q => q.variant)
+                .sort();
+            
+            // Find the next available letter variant
+            const letters = 'abcdefghijklmnopqrstuvwxyz';
+            for (let i = 0; i < letters.length; i++) {
+                if (!existingVariants.includes(letters[i])) {
+                    return letters[i];
+                }
+            }
+            return 'z'; // Fallback
+        }
+        
+        function getNextBaseId() {
+            const existingBaseIds = dataStore.questions
+                .map(q => parseInt(q.baseId) || 0)
+                .sort((a, b) => b - a);
+            
+            return existingBaseIds.length > 0 ? (existingBaseIds[0] + 1).toString() : '1';
+        }
+        
+        function performDuplication(originalQuestionId) {
+            const originalQuestion = dataStore.questions.find(q => q._id === originalQuestionId);
+            if (!originalQuestion) return;
+            
+            const duplicationType = document.querySelector('input[name="duplicateType"]:checked').value;
+            const modifyAfter = document.getElementById('modifyAfterDuplicate').checked;
+            
+            let newBaseId, newVariant;
+            
+            switch (duplicationType) {
+                case 'nextVariant':
+                    newBaseId = originalQuestion.baseId;
+                    newVariant = getNextVariant(originalQuestion.baseId);
+                    break;
+                case 'newBase':
+                    newBaseId = getNextBaseId();
+                    newVariant = 'a';
+                    break;
+                case 'custom':
+                    newBaseId = document.getElementById('customBaseId').value.trim();
+                    newVariant = document.getElementById('customVariant').value.trim();
+                    if (!newBaseId || !newVariant) {
+                        alert('Please provide both Base ID and Variant for custom option.');
+                        return;
+                    }
+                    break;
+            }
+            
+            // Check if the new question ID already exists
+            const newQuestionId = newBaseId + newVariant;
+            if (dataStore.questions.some(q => q.questionId === newQuestionId)) {
+                alert(`Question ${newQuestionId} already exists. Please choose a different ID.`);
+                return;
+            }
+            
+            // Create the duplicated question
+            const duplicatedQuestion = {
+                questionId: newQuestionId,
+                baseId: newBaseId,
+                variant: newVariant,
+                genre: originalQuestion.genre,
+                type: originalQuestion.type,
+                questionText: originalQuestion.questionText,
+                questionImage: originalQuestion.questionImage,
+                options: originalQuestion.options ? [...originalQuestion.options] : [],
+                correctAnswer: originalQuestion.correctAnswer || ''
+            };
+            
+            // Add to data store
+            const savedQuestion = dataStore.addQuestion(duplicatedQuestion);
+            
+            closeDuplicationDialog();
+            
+            // Refresh views
+            renderQuestionsLibrary();
+            renderQuestionsSelector();
+            
+            if (modifyAfter) {
+                // Load the new question for editing
+                setTimeout(() => {
+                    editQuestion(savedQuestion._id);
+                }, 100);
+                
+                // Switch to questions tab if not already there
+                if (!document.getElementById('tab-questions').classList.contains('hidden')) {
+                    // Already on questions tab
+                } else {
+                    document.querySelectorAll('.tab').forEach(btn => btn.classList.remove('active'));
+                    document.querySelectorAll('.tab-content').forEach(tab => tab.classList.add('hidden'));
+                    
+                    document.querySelector('[onclick="showTab(\'questions\')"]').classList.add('active');
+                    document.getElementById('tab-questions').classList.remove('hidden');
+                }
+            }
+            
+            alert(`Question duplicated successfully as ${newQuestionId}!${modifyAfter ? ' Loaded in editor for modification.' : ''}`);
+        }
+        
+        function closeDuplicationDialog() {
+            const modal = document.getElementById('duplication-modal');
+            if (modal) {
+                modal.remove();
+            }
+        }
+
+        function renderTemplatesList() {
+            const container = document.getElementById('templates-list');
+            container.innerHTML = '';
+            
+            if (dataStore.templates.length === 0) {
+                container.innerHTML = '<p style="color: #6b7280; text-align: center; padding: 2rem;">No templates created yet. Create your first template!</p>';
+                return;
+            }
+            
+            dataStore.templates.forEach(template => {
+                const div = document.createElement('div');
+                div.className = 'question-item';
+                
+                const headerInfo = template.header && template.header.trim() 
+                    ? `<p style="font-size: 0.75rem; color: #6b7280; margin-bottom: 0.25rem;"><strong>Header:</strong> ${template.header}</p>` 
+                    : '';
+                
+                const instructionsInfo = template.instructions && template.instructions.trim() 
+                    ? `<p style="font-size: 0.75rem; color: #6b7280; margin-bottom: 0.75rem;"><strong>Instructions:</strong> ${template.instructions.substring(0, 100)}${template.instructions.length > 100 ? '...' : ''}</p>` 
+                    : '';
+                
+                div.innerHTML = `
+                    <h3 style="font-weight: 600; font-size: 1.125rem; margin-bottom: 0.5rem;">${template.title}</h3>
+                    <p style="font-size: 0.875rem; color: #6b7280; margin-bottom: 0.5rem;">
+                        ${template.questions.length} questions selected
+                    </p>
+                    ${headerInfo}
+                    ${instructionsInfo}
+                    
+                    <div style="display: flex; gap: 0.5rem; align-items: center; margin-top: 0.75rem;">
+                        <input type="number" placeholder="# of tests" min="1" max="10" value="1"
+                               id="tests-${template._id}" style="flex: 1; padding: 0.25rem; border: 1px solid #d1d5db; border-radius: 0.25rem; font-size: 0.875rem;">
+                        <button class="btn btn-small btn-primary" 
+                                onclick="generateTests('${template._id}', parseInt(document.getElementById('tests-${template._id}').value) || 1)">
+                            Generate Tests
+                        </button>
+                        <button class="btn btn-small btn-danger" 
+                                onclick="deleteTemplate('${template._id}')">
+                            Delete
+                        </button>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function renderGeneratedTestsList() {
+            const tbody = document.getElementById('generated-tests-list');
+            tbody.innerHTML = '';
+            
+            if (dataStore.generatedTests.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="5" style="text-align: center; color: #6b7280; padding: 2rem;">
+                            No tests generated yet. Create a template and generate some tests!
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            dataStore.generatedTests.forEach(test => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>
+                        <div style="font-size: 0.875rem; font-weight: 500; color: #111827;">${test.title}</div>
+                    </td>
+                    <td>
+                        <div style="font-size: 0.875rem; color: #111827;">Version ${test.testNumber}</div>
+                    </td>
+                    <td>
+                        <div style="font-size: 0.875rem; color: #111827;">${test.questions.length}</div>
+                    </td>
+                    <td>
+                        <div style="font-size: 0.875rem; color: #6b7280;">
+                            ${new Date(test.createdAt).toLocaleDateString()}
+                        </div>
+                    </td>
+                    <td>
+                        <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                            <button class="btn btn-small btn-primary" onclick="downloadTest('${test._id}', 'test')" title="Download Test PDF">
+                                📄 Test
+                            </button>
+                            <button class="btn btn-small btn-success" onclick="downloadTest('${test._id}', 'answer-key')" title="Download Answer Key PDF">
+                                🔑 Answer Key
+                            </button>
+                            <button class="btn btn-small" onclick="previewTest('${test._id}')" 
+                                    style="background-color: #6366f1; color: white;" title="Preview Test Details">
+                                👁️ Preview
+                            </button>
+                            <button class="btn btn-small btn-danger" onclick="deleteGeneratedTest('${test._id}')" title="Delete This Test">
+                                🗑️ Delete
+                            </button>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // Data management functions
+        function exportData(type) {
+            let data, filename;
+            
+            switch (type) {
+                case 'questions':
+                    data = dataStore.questions;
+                    filename = 'questions.json';
+                    break;
+                case 'templates':
+                    data = dataStore.templates;
+                    filename = 'templates.json';
+                    break;
+                case 'generated':
+                    data = dataStore.generatedTests;
+                    filename = 'generated_tests.json';
+                    break;
+                case 'all':
+                    data = {
+                        questions: dataStore.questions,
+                        templates: dataStore.templates,
+                        generatedTests: dataStore.generatedTests,
+                        exportDate: new Date().toISOString()
+                    };
+                    filename = 'test_generator_data.json';
+                    break;
+            }
+            
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function importData() {
+            const fileInput = document.getElementById('import-file');
+            const file = fileInput.files[0];
+            
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importedData = JSON.parse(e.target.result);
+                    
+                    if (importedData.questions) {
+                        // Full data export
+                        if (confirm('This will merge the imported data with your existing data. Continue?')) {
+                            importedData.questions.forEach(q => {
+                                q._id = uuid.v4(); // Generate new IDs to avoid conflicts
+                                dataStore.questions.push(q);
+                            });
+                            
+                            importedData.templates.forEach(t => {
+                                t._id = uuid.v4();
+                                dataStore.templates.push(t);
+                            });
+                            
+                            if (importedData.generatedTests) {
+                                importedData.generatedTests.forEach(gt => {
+                                    gt._id = uuid.v4();
+                                    dataStore.generatedTests.push(gt);
+                                });
+                            }
+                            
+                            dataStore.save();
+                            refreshAllViews();
+                            alert('Data imported successfully!');
+                        }
+                    } else if (Array.isArray(importedData)) {
+                        // Single type export
+                        if (confirm('This will add the imported items to your existing data. Continue?')) {
+                            importedData.forEach(item => {
+                                item._id = uuid.v4();
+                                
+                                // Determine type by properties
+                                if (item.questionText) {
+                                    dataStore.questions.push(item);
+                                } else if (item.title && item.questions) {
+                                    dataStore.templates.push(item);
+                                } else if (item.testNumber) {
+                                    dataStore.generatedTests.push(item);
+                                }
+                            });
+                            
+                            dataStore.save();
+                            refreshAllViews();
+                            alert('Data imported successfully!');
+                        }
+                    }
+                } catch (error) {
+                    alert('Error importing data: Invalid JSON file');
+                }
+                
+                fileInput.value = '';
+            };
+            reader.readAsText(file);
+        }
+
+        function clearAllData() {
+            if (confirm('Are you sure you want to clear ALL data? This cannot be undone!')) {
+                if (confirm('This will delete all questions, templates, and generated tests. Are you absolutely sure?')) {
+                    localStorage.removeItem('testgen_questions');
+                    localStorage.removeItem('testgen_templates');
+                    localStorage.removeItem('testgen_generated');
+                    
+                    dataStore = new DataStore();
+                    refreshAllViews();
+                    alert('All data cleared!');
+                }
+            }
+        }
+
+        function updateDataStats() {
+            const container = document.getElementById('data-stats');
+            container.innerHTML = `
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                    <div style="background-color: #f0f9ff; padding: 1rem; border-radius: 0.5rem;">
+                        <div style="font-size: 1.875rem; font-weight: bold; color: #1e40af;">${dataStore.questions.length}</div>
+                        <div style="color: #1e40af;">Questions</div>
+                    </div>
+                    <div style="background-color: #f0fdf4; padding: 1rem; border-radius: 0.5rem;">
+                        <div style="font-size: 1.875rem; font-weight: bold; color: #166534;">${dataStore.templates.length}</div>
+                        <div style="color: #166534;">Templates</div>
+                    </div>
+                    <div style="background-color: #fef7ff; padding: 1rem; border-radius: 0.5rem;">
+                        <div style="font-size: 1.875rem; font-weight: bold; color: #86198f;">${dataStore.generatedTests.length}</div>
+                        <div style="color: #86198f;">Generated Tests</div>
+                    </div>
+                    <div style="background-color: #fffbeb; padding: 1rem; border-radius: 0.5rem;">
+                        <div style="font-size: 1.875rem; font-weight: bold; color: #92400e;">
+                            ${(JSON.stringify(dataStore.questions).length + JSON.stringify(dataStore.templates).length + JSON.stringify(dataStore.generatedTests).length / 1024).toFixed(1)}KB
+                        </div>
+                        <div style="color: #92400e;">Storage Used</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Question selection helper functions
+        function selectAllQuestions() {
+            document.querySelectorAll('#questions-selector input[type="checkbox"]').forEach(checkbox => {
+                if (!checkbox.closest('.question-item-selector').style.display.includes('none')) {
+                    checkbox.checked = true;
+                }
+            });
+            updateSelectionCount();
+        }
+        
+        function selectNoneQuestions() {
+            document.querySelectorAll('#questions-selector input[type="checkbox"]').forEach(checkbox => {
+                checkbox.checked = false;
+            });
+            updateSelectionCount();
+        }
+        
+        function selectByGenre() {
+            document.getElementById('genre-selection').classList.remove('hidden');
+        }
+        
+        function selectOnePerBase() {
+            // Clear all selections first
+            selectNoneQuestions();
+            
+            // Get all base IDs
+            const baseIds = new Set();
+            dataStore.questions.forEach(q => baseIds.add(q.baseId));
+            
+            // Select one random question from each base ID
+            baseIds.forEach(baseId => {
+                const baseQuestions = dataStore.questions.filter(q => q.baseId === baseId);
+                if (baseQuestions.length > 0) {
+                    const randomQuestion = baseQuestions[Math.floor(Math.random() * baseQuestions.length)];
+                    const checkbox = document.querySelector(`#questions-selector input[value="${randomQuestion._id}"]`);
+                    if (checkbox && !checkbox.closest('.question-item-selector').style.display.includes('none')) {
+                        checkbox.checked = true;
+                    }
+                }
+            });
+            updateSelectionCount();
+        }
+        
+        function selectBaseQuestions(baseId, select) {
+            const baseQuestions = dataStore.questions.filter(q => q.baseId === baseId);
+            baseQuestions.forEach(question => {
+                const checkbox = document.querySelector(`#questions-selector input[value="${question._id}"]`);
+                if (checkbox && !checkbox.closest('.question-item-selector').style.display.includes('none')) {
+                    checkbox.checked = select;
+                }
+            });
+            updateSelectionCount();
+        }
+        
+        function selectOneFromBase(baseId) {
+            // First uncheck all questions from this base
+            selectBaseQuestions(baseId, false);
+            
+            // Then select one random question from this base
+            const baseQuestions = dataStore.questions.filter(q => q.baseId === baseId);
+            if (baseQuestions.length > 0) {
+                const visibleQuestions = baseQuestions.filter(q => {
+                    const checkbox = document.querySelector(`#questions-selector input[value="${q._id}"]`);
+                    return checkbox && !checkbox.closest('.question-item-selector').style.display.includes('none');
+                });
+                
+                if (visibleQuestions.length > 0) {
+                    const randomQuestion = visibleQuestions[Math.floor(Math.random() * visibleQuestions.length)];
+                    const checkbox = document.querySelector(`#questions-selector input[value="${randomQuestion._id}"]`);
+                    if (checkbox) {
+                        checkbox.checked = true;
+                    }
+                }
+            }
+            updateSelectionCount();
+        }
+        
+        function applyGenreSelection() {
+            const selectedGenre = document.getElementById('genre-selector').value;
+            if (selectedGenre) {
+                // Select all questions with this genre that are currently visible
+                document.querySelectorAll('#questions-selector input[type="checkbox"]').forEach(checkbox => {
+                    const questionDiv = checkbox.closest('.question-item-selector');
+                    if (questionDiv && questionDiv.getAttribute('data-genre') === selectedGenre.toLowerCase() && !questionDiv.style.display.includes('none')) {
+                        checkbox.checked = true;
+                    }
+                });
+                updateSelectionCount();
+            }
+            cancelGenreSelection();
+        }
+        
+        function cancelGenreSelection() {
+            document.getElementById('genre-selection').classList.add('hidden');
+        }
+        
+        function populateGenreFilters() {
+            const genres = [...new Set(dataStore.questions.map(q => q.genre))].sort();
+            
+            // Populate genre selector dropdown
+            const genreSelector = document.getElementById('genre-selector');
+            genreSelector.innerHTML = '<option value="">Select a genre...</option>';
+            genres.forEach(genre => {
+                const option = document.createElement('option');
+                option.value = genre;
+                option.textContent = genre;
+                genreSelector.appendChild(option);
+            });
+            
+            // Populate genre filter dropdown
+            const genreFilter = document.getElementById('genre-filter');
+            const currentValue = genreFilter.value;
+            genreFilter.innerHTML = '<option value="">All Genres</option>';
+            genres.forEach(genre => {
+                const option = document.createElement('option');
+                option.value = genre;
+                option.textContent = genre;
+                if (genre === currentValue) {
+                    option.selected = true;
+                }
+                genreFilter.appendChild(option);
+            });
+        }
+        
+        function filterQuestions() {
+            const searchTerm = document.getElementById('question-search').value.toLowerCase();
+            const genreFilter = document.getElementById('genre-filter').value.toLowerCase();
+            
+            let visibleCount = 0;
+            
+            document.querySelectorAll('.question-item-selector').forEach(item => {
+                const text = item.getAttribute('data-text') || '';
+                const genre = item.getAttribute('data-genre') || '';
+                
+                const matchesSearch = !searchTerm || text.includes(searchTerm);
+                const matchesGenre = !genreFilter || genre === genreFilter;
+                
+                if (matchesSearch && matchesGenre) {
+                    item.style.display = '';
+                    visibleCount++;
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+            
+            // Hide/show group containers based on visible items
+            document.querySelectorAll('.question-group').forEach(group => {
+                const visibleItems = group.querySelectorAll('.question-item-selector:not([style*="display: none"])');
+                if (visibleItems.length === 0) {
+                    group.style.display = 'none';
+                } else {
+                    group.style.display = '';
+                }
+            });
+            
+            updateVisibleCount(visibleCount);
+        }
+        
+        function clearFilters() {
+            document.getElementById('question-search').value = '';
+            document.getElementById('genre-filter').value = '';
+            filterQuestions();
+        }
+        
+        function updateSelectionCount() {
+            const selectedCount = document.querySelectorAll('#questions-selector input[type="checkbox"]:checked').length;
+            document.getElementById('selection-count').textContent = `${selectedCount} questions selected`;
+        }
+        
+        function deleteGeneratedTest(testId) {
+            const test = dataStore.generatedTests.find(t => t._id === testId);
+            if (!test) return;
+            
+            const confirmMessage = `Are you sure you want to delete this test?\n\nTest: ${test.title}\nVersion: ${test.testNumber}\nCreated: ${new Date(test.createdAt).toLocaleDateString()}\n\nThis action cannot be undone.`;
+            
+            if (confirm(confirmMessage)) {
+                dataStore.generatedTests = dataStore.generatedTests.filter(t => t._id !== testId);
+                dataStore.save();
+                renderGeneratedTestsList();
+                updateDataStats();
+                
+                // Show success message
+                const message = `Test "${test.title} - Version ${test.testNumber}" has been deleted successfully.`;
+                alert(message);
+            }
+        }
+
+        function previewTest(testId) {
+            const test = dataStore.generatedTests.find(t => t._id === testId);
+            if (!test) return;
+            
+            // Create preview modal content
+            const questionsList = test.questions.map((q, index) => {
+                const questionText = q.questionText.replace(/<[^>]*>/g, '').substring(0, 100);
+                const displayText = questionText.length === 100 ? questionText + '...' : questionText;
+                
+                let answerInfo = '';
+                if (q.type === 'multiple-choice') {
+                    const correctOption = q.options.find(opt => opt.isCorrect);
+                    if (correctOption) {
+                        const correctIndex = q.options.indexOf(correctOption);
+                        const correctLetter = String.fromCharCode(65 + correctIndex);
+                        answerInfo = `Answer: ${correctLetter}`;
+                    }
+                } else {
+                    answerInfo = `Answer: ${q.correctAnswer || 'No answer provided'}`;
+                }
+                
+                return `${index + 1}. ${q.questionId} - ${displayText} (${answerInfo})`;
+            }).join('\n');
+            
+            const previewText = `TEST PREVIEW
+            
+Title: ${test.title}
+Version: ${test.testNumber}
+Created: ${new Date(test.createdAt).toLocaleString()}
+Questions: ${test.questions.length}
+
+${test.header ? `Header: ${test.header}\n` : ''}
+${test.instructions ? `Instructions: ${test.instructions}\n` : ''}
+
+QUESTIONS:
+${questionsList}`;
+            
+            alert(previewText);
+        }
+
+        function deleteTemplate(id) {
+            if (confirm('Are you sure you want to delete this template?')) {
+                dataStore.templates = dataStore.templates.filter(t => t._id !== id);
+                dataStore.save();
+                renderTemplatesList();
+                updateDataStats();
+            }
+        }
+
+        function clearAllGeneratedTests() {
+            if (dataStore.generatedTests.length === 0) {
+                alert('No generated tests to clear.');
+                return;
+            }
+            
+            const confirmMessage = `Are you sure you want to delete ALL ${dataStore.generatedTests.length} generated tests?\n\nThis will permanently remove all test versions and cannot be undone.\n\nYour questions and templates will not be affected.`;
+            
+            if (confirm(confirmMessage)) {
+                if (confirm('This is your final warning. All generated tests will be permanently deleted. Continue?')) {
+                    dataStore.generatedTests = [];
+                    dataStore.save();
+                    renderGeneratedTestsList();
+                    updateGeneratedTestsStats();
+                    updateDataStats();
+                    alert('All generated tests have been cleared successfully.');
+                }
+            }
+        }
+
+        function updateGeneratedTestsStats() {
+            const totalTests = dataStore.generatedTests.length;
+            const uniqueTemplates = new Set(dataStore.generatedTests.map(t => t.templateId)).size;
+            const mostRecent = dataStore.generatedTests.length > 0 
+                ? dataStore.generatedTests.reduce((latest, test) => 
+                    new Date(test.createdAt) > new Date(latest.createdAt) ? test : latest
+                ).title + ' v' + dataStore.generatedTests.reduce((latest, test) => 
+                    new Date(test.createdAt) > new Date(latest.createdAt) ? test : latest
+                ).testNumber
+                : 'None';
+            
+            document.getElementById('total-tests-count').textContent = totalTests;
+            document.getElementById('templates-used-count').textContent = uniqueTemplates;
+            document.getElementById('most-recent-test').textContent = mostRecent;
+        }
+
+        function refreshAllViews() {
+            renderQuestionsLibrary();
+            renderQuestionsSelector();
+            renderTemplatesList();
+            renderGeneratedTestsList();
+            updateDataStats();
+        }
+
+        function showLoading(show) {
+            const loadingEl = document.getElementById('loading');
+            if (show) {
+                loadingEl.classList.remove('hidden');
+            } else {
+                loadingEl.classList.add('hidden');
+            }
+        }
+    </script>
+</body>
+</html>
