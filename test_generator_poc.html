@@ -413,6 +413,19 @@
                         </div>
 
                         <div class="form-group">
+                            <select id="subjectPool" class="form-select">
+                                <option value="">Select Subject Pool...</option>
+                                <option value="organic-chemistry">Organic Chemistry</option>
+                                <option value="microbiology">Microbiology</option>
+                                <option value="general-biology">General Biology</option>
+                                <option value="physics">Physics</option>
+                                <option value="mathematics">Mathematics</option>
+                                <option value="custom">Custom Pool...</option>
+                                <input type="text" id="customSubjectPool" class="form-input hidden" placeholder="Enter custom subject pool name" style="margin-top: 5px;">
+                            </select>
+                        </div>
+
+                        <div class="form-group">
                             <label class="form-label">Type</label>
                             <select id="questionType" class="form-select" onchange="toggleQuestionType()">
                                 <option value="multiple-choice">Multiple Choice</option>
@@ -701,7 +714,22 @@
             document.getElementById('template-form').addEventListener('submit', handleTemplateSubmit);
             document.getElementById('baseId').addEventListener('input', updateQuestionId);
             document.getElementById('variant').addEventListener('input', updateQuestionId);
+            document.getElementById('subjectPool').addEventListener('change', toggleCustomSubjectPool);
         });
+
+        function toggleCustomSubjectPool() {
+            const subjectPool = document.getElementById('subjectPool');
+            const customInput = document.getElementById('customSubjectPool');
+            
+            if (subjectPool.value === 'custom') {
+                customInput.classList.remove('hidden');
+                customInput.required = true;
+            } else {
+                customInput.classList.add('hidden');
+                customInput.required = false;
+                customInput.value = '';
+            }
+        }
 
         // Tab functionality
         function showTab(tabName) {
@@ -761,6 +789,33 @@
             toggleQuestionType();
         }
 
+        // function generateOptionsHTML() {
+        //     const container = document.getElementById('options-container');
+        //     const letters = ['A', 'B', 'C', 'D'];
+            
+        //     container.innerHTML = '';
+            
+        //     letters.forEach((letter, index) => {
+        //         const optionDiv = document.createElement('div');
+        //         optionDiv.className = 'option-item';
+        //         optionDiv.innerHTML = `
+        //             <div class="option-header">
+        //                 <span style="font-weight: 500;">${letter}.</span>
+        //                 <input type="checkbox" id="correct-${index}" onchange="handleCorrectAnswer(${index})">
+        //                 <label for="correct-${index}" class="text-sm" style="color: #6b7280;">Correct Answer</label>
+        //             </div>
+        //             <div class="format-toolbar">
+        //                 <button type="button" class="format-btn" onclick="formatText('option-${index}', 'bold')"><b>B</b></button>
+        //                 <button type="button" class="format-btn" onclick="formatText('option-${index}', 'underline')"><u>U</u></button>
+        //             </div>
+        //             <textarea id="option-${index}" class="form-textarea" oninput="updatePreview('option-${index}', 'option-preview-${index}')"></textarea>
+        //             <div class="preview">Preview: <span id="option-preview-${index}"></span></div>
+        //             <input type="file" class="form-input" accept="image/*" onchange="handleImageUpload('option-${index}-image')" style="margin-top: 0.5rem;">
+        //         `;
+        //         container.appendChild(optionDiv);
+        //     });
+        // }
+
         function generateOptionsHTML() {
             const container = document.getElementById('options-container');
             const letters = ['A', 'B', 'C', 'D'];
@@ -783,19 +838,49 @@
                     <textarea id="option-${index}" class="form-textarea" oninput="updatePreview('option-${index}', 'option-preview-${index}')"></textarea>
                     <div class="preview">Preview: <span id="option-preview-${index}"></span></div>
                     <input type="file" class="form-input" accept="image/*" onchange="handleImageUpload('option-${index}-image')" style="margin-top: 0.5rem;">
+                    
+                    <!-- Notes section for correct answers -->
+                    <div class="option-note hidden" id="note-container-${index}" style="margin-top: 0.5rem; padding-left: 1.5rem; border-left: 2px solid #d1d5db;">
+                        <label class="text-sm" style="color: #374151;">Answer Note:</label>
+                        <textarea id="note-${index}" class="form-textarea" placeholder="Explanation or notes..."></textarea>
+                        <input type="file" class="form-input" accept="image/*" onchange="handleImageUpload('note-${index}-image')" style="margin-top: 0.5rem;">
+                    </div>
                 `;
                 container.appendChild(optionDiv);
             });
         }
 
         function handleCorrectAnswer(index) {
-            // Uncheck all other options
+            // Uncheck all other options and hide their notes
             for (let i = 0; i < 4; i++) {
+                const checkbox = document.getElementById(`correct-${i}`);
+                const noteContainer = document.getElementById(`note-container-${i}`);
+
                 if (i !== index) {
-                    document.getElementById(`correct-${i}`).checked = false;
+                    checkbox.checked = false;
+                    if (noteContainer) noteContainer.classList.add('hidden');
                 }
             }
+
+            // Show/hide notes for the newly toggled option
+            const currentCheckbox = document.getElementById(`correct-${index}`);
+            const currentNoteContainer = document.getElementById(`note-container-${index}`);
+            if (currentCheckbox.checked) {
+                currentNoteContainer.classList.remove('hidden');
+            } else {
+                currentNoteContainer.classList.add('hidden');
+            }
         }
+
+
+        // function handleCorrectAnswer(index) {
+        //     // Uncheck all other options
+        //     for (let i = 0; i < 4; i++) {
+        //         if (i !== index) {
+        //             document.getElementById(`correct-${i}`).checked = false;
+        //         }
+        //     }
+        // }
 
         // Text formatting functions
         function formatText(textareaId, format) {
@@ -839,34 +924,95 @@
         }
 
         // Question CRUD operations
+        // function handleQuestionSubmit(e) {
+        //     e.preventDefault();
+        //     showLoading(true);
+            
+        //     setTimeout(() => {
+        //         let subjectPool = document.getElementById('subjectPool').value;
+        //         if (subjectPool === 'custom') {
+        //             subjectPool = document.getElementById('customSubjectPool').value.toLowerCase().replace(/\s+/g, '-');
+        //         }
+        //         const formData = {
+        //             questionId: document.getElementById('questionId').value,
+        //             baseId: document.getElementById('baseId').value,
+        //             variant: document.getElementById('variant').value,
+        //             subjectPool: subjectPool,
+        //             genre: document.getElementById('genre').value,
+        //             type: document.getElementById('questionType').value,
+        //             questionText: document.getElementById('questionText').value,
+        //             questionImage: currentImages['questionImage'] || null,
+        //         };
+                
+        //         if (formData.type === 'multiple-choice') {
+        //             formData.options = [];
+        //             for (let i = 0; i < 4; i++) {
+        //                 formData.options.push({
+        //                     text: document.getElementById(`option-${i}`).value,
+        //                     image: currentImages[`option-${i}-image`] || null,
+        //                     isCorrect: document.getElementById(`correct-${i}`).checked
+        //                 });
+        //             }
+        //         } else {
+        //             formData.correctAnswer = document.getElementById('correctAnswer').value;
+        //         }
+                
+        //         if (editingQuestionId) {
+        //             dataStore.updateQuestion(editingQuestionId, formData);
+        //             editingQuestionId = null;
+        //             document.getElementById('question-form-title').textContent = 'Add New Question';
+        //             document.getElementById('cancel-edit-btn').classList.add('hidden');
+        //             document.getElementById('submit-btn-text').textContent = 'Create Question';
+        //         } else {
+        //             dataStore.addQuestion(formData);
+        //         }
+                
+        //         resetQuestionForm();
+        //         renderQuestionsLibrary();
+        //         renderQuestionsSelector();
+        //         showLoading(false);
+        //     }, 500);
+        // }
         function handleQuestionSubmit(e) {
             e.preventDefault();
             showLoading(true);
-            
+
             setTimeout(() => {
+                let subjectPool = document.getElementById('subjectPool').value;
+                if (subjectPool === 'custom') {
+                    subjectPool = document.getElementById('customSubjectPool').value
+                        .toLowerCase()
+                        .replace(/\s+/g, '-');
+                }
+
                 const formData = {
                     questionId: document.getElementById('questionId').value,
                     baseId: document.getElementById('baseId').value,
                     variant: document.getElementById('variant').value,
+                    subjectPool: subjectPool,
                     genre: document.getElementById('genre').value,
                     type: document.getElementById('questionType').value,
                     questionText: document.getElementById('questionText').value,
                     questionImage: currentImages['questionImage'] || null,
                 };
-                
+
                 if (formData.type === 'multiple-choice') {
                     formData.options = [];
                     for (let i = 0; i < 4; i++) {
                         formData.options.push({
                             text: document.getElementById(`option-${i}`).value,
                             image: currentImages[`option-${i}-image`] || null,
-                            isCorrect: document.getElementById(`correct-${i}`).checked
+                            isCorrect: document.getElementById(`correct-${i}`).checked,
+                            note: document.getElementById(`note-${i}`) 
+                                ? document.getElementById(`note-${i}`).value 
+                                : '',
+                            noteImage: currentImages[`note-${i}-image`] || null
                         });
                     }
                 } else {
                     formData.correctAnswer = document.getElementById('correctAnswer').value;
                 }
-                
+
                 if (editingQuestionId) {
                     dataStore.updateQuestion(editingQuestionId, formData);
                     editingQuestionId = null;
@@ -876,7 +1022,7 @@
                 } else {
                     dataStore.addQuestion(formData);
                 }
-                
+
                 resetQuestionForm();
                 renderQuestionsLibrary();
                 renderQuestionsSelector();
@@ -884,23 +1030,25 @@
             }, 500);
         }
 
+
         function resetQuestionForm() {
             document.getElementById('question-form').reset();
             currentImages = {};
             generateOptionsHTML();
             document.getElementById('questionId').value = '';
             document.querySelectorAll('.preview span').forEach(span => span.innerHTML = '');
+            document.getElementById('customSubjectPool').classList.add('hidden');
         }
 
         function editQuestion(id) {
             const question = dataStore.questions.find(q => q._id === id);
             if (!question) return;
-            
+
             editingQuestionId = id;
             document.getElementById('question-form-title').textContent = 'Edit Question';
             document.getElementById('cancel-edit-btn').classList.remove('hidden');
             document.getElementById('submit-btn-text').textContent = 'Update Question';
-            
+
             // Fill form
             document.getElementById('baseId').value = question.baseId;
             document.getElementById('variant').value = question.variant;
@@ -908,25 +1056,67 @@
             document.getElementById('genre').value = question.genre;
             document.getElementById('questionType').value = question.type;
             document.getElementById('questionText').value = question.questionText;
-            
+
             if (question.questionImage) {
                 currentImages['questionImage'] = question.questionImage;
             }
-            
+
+            if (question.subjectPool) {
+                const select = document.getElementById('subjectPool');
+                const customInput = document.getElementById('customSubjectPool');
+
+                // Check if the subjectPool matches an existing option
+                const matchOption = Array.from(select.options).find(
+                    opt => opt.value === question.subjectPool
+                );
+
+                if (matchOption) {
+                    select.value = question.subjectPool;
+                    customInput.classList.add('hidden');
+                } else {
+                    // If not, use custom
+                    select.value = 'custom';
+                    customInput.classList.remove('hidden');
+                    customInput.value = question.subjectPool.replace(/-/g, ' ');
+                }
+            }
+
             toggleQuestionType();
-            
+
             if (question.type === 'multiple-choice') {
                 question.options.forEach((option, index) => {
                     document.getElementById(`option-${index}`).value = option.text;
+
+                    // Auto-check correct answer box
                     document.getElementById(`correct-${index}`).checked = option.isCorrect;
+
                     if (option.image) {
                         currentImages[`option-${index}-image`] = option.image;
                     }
+
+                    // ✅ Populate notes + note image for correct answers
+                    if (option.isCorrect) {
+                        if (option.note) {
+                            document.getElementById(`note-${index}`).value = option.note;
+                        }
+                        if (option.noteImage) {
+                            currentImages[`note-${index}-note-image`] = option.noteImage;
+                        }
+                    }
                 });
             } else {
+                // Short-answer
                 document.getElementById('correctAnswer').value = question.correctAnswer || '';
+
+                // ✅ Populate short-answer notes + note image
+                if (question.correctAnswerNote) {
+                    document.getElementById('correctAnswerNote').value = question.correctAnswerNote;
+                }
+                if (question.correctAnswerNoteImage) {
+                    currentImages['correctAnswerNoteImage'] = question.correctAnswerNoteImage;
+                }
             }
-            
+
             // Update previews
             updatePreview('questionText', 'questionPreview');
             for (let i = 0; i < 4; i++) {
@@ -992,90 +1182,182 @@
             }, 500);
         }
 
-        function generateTests(templateId, numberOfTests) {
-            const template = dataStore.templates.find(t => t._id === templateId);
-            if (!template) return;
+        // function generateTests(templateId, numberOfTests) {
+        //     const template = dataStore.templates.find(t => t._id === templateId);
+        //     if (!template) return;
             
-            showLoading(true);
+        //     showLoading(true);
             
-            setTimeout(() => {
-                // Group questions by base ID
-                const questionGroups = {};
-                template.questions.forEach(qId => {
-                    const question = dataStore.questions.find(q => q._id === qId);
-                    if (question) {
-                        if (!questionGroups[question.baseId]) {
-                            questionGroups[question.baseId] = [];
-                        }
-                        questionGroups[question.baseId].push(question);
-                    }
-                });
+        //     setTimeout(() => {
+        //         // Group questions by base ID
+        //         const questionGroups = {};
+        //         template.questions.forEach(qId => {
+        //             const question = dataStore.questions.find(q => q._id === qId);
+        //             if (question) {
+        //                 if (!questionGroups[question.baseId]) {
+        //                     questionGroups[question.baseId] = [];
+        //                 }
+        //                 questionGroups[question.baseId].push(question);
+        //             }
+        //         });
                 
-                // Sort base IDs to ensure consistent ordering
-                const sortedBaseIds = Object.keys(questionGroups).sort((a, b) => {
-                    const numA = parseInt(a) || 0;
-                    const numB = parseInt(b) || 0;
-                    return numA - numB;
-                });
+        //         // Sort base IDs to ensure consistent ordering
+        //         const sortedBaseIds = Object.keys(questionGroups).sort((a, b) => {
+        //             const numA = parseInt(a) || 0;
+        //             const numB = parseInt(b) || 0;
+        //             return numA - numB;
+        //         });
                 
-                // Create systematic distribution for each test
-                for (let testIndex = 0; testIndex < numberOfTests; testIndex++) {
-                    const testQuestions = [];
+        //         // Create systematic distribution for each test
+        //         for (let testIndex = 0; testIndex < numberOfTests; testIndex++) {
+        //             const testQuestions = [];
                     
-                    // For each base question group, systematically select variants
-                    sortedBaseIds.forEach(baseId => {
-                        const variants = questionGroups[baseId];
+        //             // For each base question group, systematically select variants
+        //             sortedBaseIds.forEach(baseId => {
+        //                 const variants = questionGroups[baseId];
                         
-                        // Systematic selection: distribute variants evenly across tests
-                        let selectedQuestion;
+        //                 // Systematic selection: distribute variants evenly across tests
+        //                 let selectedQuestion;
                         
-                        if (variants.length >= numberOfTests) {
-                            // If we have enough variants, use one per test systematically
-                            selectedQuestion = variants[testIndex % variants.length];
-                        } else {
-                            // If we have fewer variants than tests, distribute as evenly as possible
-                            // Use a distribution algorithm that spreads variants across tests
-                            const variantIndex = Math.floor((testIndex * variants.length) / numberOfTests);
-                            selectedQuestion = variants[variantIndex];
-                        }
+        //                 if (variants.length >= numberOfTests) {
+        //                     // If we have enough variants, use one per test systematically
+        //                     selectedQuestion = variants[testIndex % variants.length];
+        //                 } else {
+        //                     // If we have fewer variants than tests, distribute as evenly as possible
+        //                     // Use a distribution algorithm that spreads variants across tests
+        //                     const variantIndex = Math.floor((testIndex * variants.length) / numberOfTests);
+        //                     selectedQuestion = variants[variantIndex];
+        //                 }
                         
+        //                 testQuestions.push({
+        //                     questionId: selectedQuestion.questionId,
+        //                     questionText: selectedQuestion.questionText,
+        //                     questionImage: selectedQuestion.questionImage,
+        //                     type: selectedQuestion.type,
+        //                     options: selectedQuestion.options,
+        //                     correctAnswer: selectedQuestion.correctAnswer
+        //                 });
+        //             });
+                    
+        //             // Sort questions by base ID for consistent ordering
+        //             testQuestions.sort((a, b) => {
+        //                 const aBase = parseInt(a.questionId.replace(/[a-z]/g, ''));
+        //                 const bBase = parseInt(b.questionId.replace(/[a-z]/g, ''));
+        //                 return aBase - bBase;
+        //             });
+                    
+        //             const generatedTest = {
+        //                 templateId: templateId,
+        //                 testNumber: testIndex + 1,
+        //                 title: template.title,
+        //                 header: template.header,
+        //                 instructions: template.instructions,
+        //                 questions: testQuestions
+        //             };
+                    
+        //             dataStore.addGeneratedTest(generatedTest);
+        //         }
+                
+        //         renderGeneratedTestsList();
+        //         updateGeneratedTestsStats();
+        //         showLoading(false);
+                
+        //         // Show detailed generation summary
+        //         showTestGenerationSummary(questionGroups, numberOfTests);
+        //     }, 1000);
+        // }
+
+        function generateTests(templateId, numberOfTests) {
+    const template = dataStore.templates.find(t => t._id === templateId);
+    if (!template) return;
+
+    showLoading(true);
+
+    setTimeout(() => {
+        // Group questions by subject pool first, then by base ID
+        const subjectGroups = {};
+        template.questions.forEach(qId => {
+            const question = dataStore.questions.find(q => q._id === qId);
+            if (!question) return;
+
+            const subject = question.subjectPool || 'uncategorized';
+            if (!subjectGroups[subject]) subjectGroups[subject] = {};
+            if (!subjectGroups[subject][question.baseId]) subjectGroups[subject][question.baseId] = [];
+
+            subjectGroups[subject][question.baseId].push(question);
+        });
+
+        // Keep track of rotation per subject/baseID to minimize repetition
+        const rotationIndexes = {};
+        Object.keys(subjectGroups).forEach(subject => {
+            rotationIndexes[subject] = {};
+            Object.keys(subjectGroups[subject]).forEach(baseId => {
+                rotationIndexes[subject][baseId] = 0;
+            });
+        });
+
+        for (let testIndex = 0; testIndex < numberOfTests; testIndex++) {
+            const testQuestions = [];
+
+            // Process subjects alphabetically for consistency
+            Object.keys(subjectGroups).sort().forEach(subject => {
+                const baseGroups = subjectGroups[subject];
+
+                Object.keys(baseGroups).sort((a, b) => (parseInt(a) || 0) - (parseInt(b) || 0))
+                    .forEach(baseId => {
+                        const variants = baseGroups[baseId];
+                        const rotationIndex = rotationIndexes[subject][baseId];
+
+                        // Systematically select variant
+                        const selectedQuestion = variants[rotationIndex % variants.length];
+
+                        // Increment rotation for next test
+                        rotationIndexes[subject][baseId] = rotationIndex + 1;
+
                         testQuestions.push({
                             questionId: selectedQuestion.questionId,
+                            baseId: selectedQuestion.baseId,
+                            subjectPool: selectedQuestion.subjectPool,
                             questionText: selectedQuestion.questionText,
                             questionImage: selectedQuestion.questionImage,
                             type: selectedQuestion.type,
                             options: selectedQuestion.options,
-                            correctAnswer: selectedQuestion.correctAnswer
+                            correctAnswer: selectedQuestion.correctAnswer,
+                            correctAnswerNote: selectedQuestion.correctAnswerNote,
+                            correctAnswerNoteImage: selectedQuestion.correctAnswerNoteImage
                         });
                     });
-                    
-                    // Sort questions by base ID for consistent ordering
-                    testQuestions.sort((a, b) => {
-                        const aBase = parseInt(a.questionId.replace(/[a-z]/g, ''));
-                        const bBase = parseInt(b.questionId.replace(/[a-z]/g, ''));
-                        return aBase - bBase;
-                    });
-                    
-                    const generatedTest = {
-                        templateId: templateId,
-                        testNumber: testIndex + 1,
-                        title: template.title,
-                        header: template.header,
-                        instructions: template.instructions,
-                        questions: testQuestions
-                    };
-                    
-                    dataStore.addGeneratedTest(generatedTest);
-                }
-                
-                renderGeneratedTestsList();
-                updateGeneratedTestsStats();
-                showLoading(false);
-                
-                // Show detailed generation summary
-                showTestGenerationSummary(questionGroups, numberOfTests);
-            }, 1000);
+            });
+
+            // Sort questions by subject + base ID for consistent PDF order
+            testQuestions.sort((a, b) => {
+                if (a.subjectPool !== b.subjectPool) return a.subjectPool.localeCompare(b.subjectPool);
+                const aBase = parseInt(a.baseId) || 0;
+                const bBase = parseInt(b.baseId) || 0;
+                return aBase - bBase;
+            });
+
+            const generatedTest = {
+                templateId: templateId,
+                testNumber: testIndex + 1,
+                title: template.title,
+                header: template.header,
+                instructions: template.instructions,
+                questions: testQuestions
+            };
+
+            dataStore.addGeneratedTest(generatedTest);
         }
+
+        renderGeneratedTestsList();
+        updateGeneratedTestsStats();
+        showLoading(false);
+
+        // Show detailed generation summary
+        showTestGenerationSummary(subjectGroups, numberOfTests);
+    }, 1000);
+}
+
         
         function showTestGenerationSummary(questionGroups, numberOfTests) {
             let summary = `✅ Generated ${numberOfTests} tests successfully!\n\n`;
@@ -1255,16 +1537,20 @@
                                 doc.setFontSize(11);
                                 doc.setFont(undefined, 'bold');
                                 doc.text(`${letter}. `, 30, yPosition);
-                                
+
                                 // Add formatted option text
                                 const optionResult = addFormattedTextToPDF(doc, option.text, 42, yPosition, 140);
-                                
+
                                 // Add checkmark
                                 doc.setFont(undefined, 'bold');
-                                doc.text(' ✓', 42 + doc.getTextWidth(option.text.replace(/<[^>]*>/g, '')), yPosition);
-                                
+                                doc.text(
+                                    ' ✓',
+                                    42 + doc.getTextWidth(option.text.replace(/<[^>]*>/g, '')),
+                                    yPosition
+                                );
+
                                 yPosition = optionResult.finalY + 3;
-                                
+
                                 // Add option image if it exists and is correct answer
                                 if (option.image && option.image.startsWith('data:image/')) {
                                     try {
@@ -1274,18 +1560,56 @@
                                                 doc.addPage();
                                                 yPosition = 20;
                                             }
-                                            
+
                                             const imgWidth = Math.min(imgData.width, 80);
                                             const imgHeight = (imgData.height * imgWidth) / imgData.width;
                                             const maxHeight = 40;
                                             const finalHeight = Math.min(imgHeight, maxHeight);
                                             const finalWidth = (imgData.width * finalHeight) / imgData.height;
-                                            
+
                                             doc.addImage(option.image, 'JPEG', 45, yPosition, finalWidth, finalHeight);
                                             yPosition += finalHeight + 5;
                                         }
                                     } catch (error) {
                                         console.warn('Could not add option image:', error);
+                                    }
+                                }
+
+                                // ✅ Add correct answer notes (text + optional image)
+                                if (option.note && option.note.trim() !== '') {
+                                    if (yPosition + 10 > 280) {
+                                        doc.addPage();
+                                        yPosition = 20;
+                                    }
+
+                                    doc.setFontSize(10);
+                                    doc.setFont(undefined, 'italic');
+                                    const noteText = `Note: ${option.note}`;
+                                    const noteResult = doc.splitTextToSize(noteText, 140);
+                                    doc.text(noteResult, 45, yPosition);
+                                    yPosition += (noteResult.length * 5) + 3;
+                                }
+
+                                if (option.noteImage && option.noteImage.startsWith('data:image/')) {
+                                    try {
+                                        const noteImgData = await loadImageForPDF(option.noteImage);
+                                        if (noteImgData) {
+                                            if (yPosition + 40 > 280) {
+                                                doc.addPage();
+                                                yPosition = 20;
+                                            }
+
+                                            const imgWidth = Math.min(noteImgData.width, 80);
+                                            const imgHeight = (noteImgData.height * imgWidth) / noteImgData.width;
+                                            const maxHeight = 40;
+                                            const finalHeight = Math.min(imgHeight, maxHeight);
+                                            const finalWidth = (noteImgData.width * finalHeight) / noteImgData.height;
+
+                                            doc.addImage(option.noteImage, 'JPEG', 45, yPosition, finalWidth, finalHeight);
+                                            yPosition += finalHeight + 5;
+                                        }
+                                    } catch (error) {
+                                        console.warn('Could not add note image:', error);
                                     }
                                 }
                             }
@@ -1330,11 +1654,50 @@
                         doc.setFontSize(11);
                         doc.setFont(undefined, 'bold');
                         doc.text('Answer: ', 30, yPosition);
-                        
+
                         // Add formatted answer text
                         const answerText = question.correctAnswer || 'No answer provided';
                         const answerResult = addFormattedTextToPDF(doc, answerText, 55, yPosition, 125);
                         yPosition = answerResult.finalY + 5;
+
+                        // ✅ Add short-answer notes if available
+                        if (question.correctAnswerNote && question.correctAnswerNote.trim() !== '') {
+                            if (yPosition + 10 > 280) {
+                                doc.addPage();
+                                yPosition = 20;
+                            }
+
+                            doc.setFontSize(10);
+                            doc.setFont(undefined, 'italic');
+                            const noteText = `Note: ${question.correctAnswerNote}`;
+                            const noteLines = doc.splitTextToSize(noteText, 140);
+                            doc.text(noteLines, 45, yPosition);
+                            yPosition += (noteLines.length * 5) + 3;
+                        }
+
+                        // ✅ Add short-answer note image if available
+                        if (question.correctAnswerNoteImage && question.correctAnswerNoteImage.startsWith('data:image/')) {
+                            try {
+                                const noteImgData = await loadImageForPDF(question.correctAnswerNoteImage);
+                                if (noteImgData) {
+                                    if (yPosition + 40 > 280) {
+                                        doc.addPage();
+                                        yPosition = 20;
+                                    }
+
+                                    const imgWidth = Math.min(noteImgData.width, 80);
+                                    const imgHeight = (noteImgData.height * imgWidth) / noteImgData.width;
+                                    const maxHeight = 40;
+                                    const finalHeight = Math.min(imgHeight, maxHeight);
+                                    const finalWidth = (noteImgData.width * finalHeight) / noteImgData.height;
+
+                                    doc.addImage(question.correctAnswerNoteImage, 'JPEG', 45, yPosition, finalWidth, finalHeight);
+                                    yPosition += finalHeight + 5;
+                                }
+                            } catch (error) {
+                                console.warn('Could not add short-answer note image:', error);
+                            }
+                        }
                     } else {
                         // Add answer lines for short answer
                         doc.setFontSize(11);
@@ -1499,150 +1862,358 @@
         }
 
         // Render functions
+        // function renderQuestionsLibrary() {
+        //     const container = document.getElementById('questions-list');
+        //     const groupedQuestions = {};
+            
+        //     dataStore.questions.forEach(question => {
+        //         if (!groupedQuestions[question.baseId]) {
+        //             groupedQuestions[question.baseId] = [];
+        //         }
+        //         groupedQuestions[question.baseId].push(question);
+        //     });
+            
+        //     container.innerHTML = '';
+            
+        //     Object.entries(groupedQuestions).forEach(([baseId, questionGroup]) => {
+        //         const groupDiv = document.createElement('div');
+        //         groupDiv.className = 'question-item';
+                
+        //         let groupHTML = `
+        //             <h3 style="font-weight: 600; font-size: 1.125rem; margin-bottom: 0.5rem;">Question ${baseId}</h3>
+        //         `;
+                
+        //         questionGroup.forEach(question => {
+        //             const questionText = question.questionText.length > 100 
+        //                 ? question.questionText.substring(0, 100) + '...'
+        //                 : question.questionText;
+                        
+        //             groupHTML += `
+        //                 <div style="background-color: #f9fafb; padding: 0.75rem; border-radius: 0.375rem; margin-bottom: 0.5rem;">
+        //                     <div class="question-badges">
+        //                         <span class="badge badge-blue">${question.questionId}</span>
+        //                         <span class="badge badge-green">${question.genre}</span>
+        //                         <span class="badge badge-purple">${question.type}</span>
+        //                     </div>
+        //                     <p style="font-size: 0.875rem; color: #374151;">${questionText.replace(/<[^>]*>/g, '')}</p>
+        //                     <div class="question-actions">
+        //                         <button class="btn btn-small btn-primary" onclick="editQuestion('${question._id}')">Edit</button>
+        //                         <button class="btn btn-small btn-success" onclick="duplicateQuestion('${question._id}')" title="Duplicate this question">Duplicate</button>
+        //                         <button class="btn btn-small btn-danger" onclick="deleteQuestion('${question._id}')">Delete</button>
+        //                     </div>
+        //                 </div>
+        //             `;
+        //         });
+                
+        //         groupDiv.innerHTML = groupHTML;
+        //         container.appendChild(groupDiv);
+        //     });
+        // }
         function renderQuestionsLibrary() {
             const container = document.getElementById('questions-list');
-            const groupedQuestions = {};
-            
+            const subjectGroups = {};
+
+            // Group questions first by subject, then by baseId
             dataStore.questions.forEach(question => {
-                if (!groupedQuestions[question.baseId]) {
-                    groupedQuestions[question.baseId] = [];
-                }
-                groupedQuestions[question.baseId].push(question);
+                const subject = question.subjectPool || 'uncategorized';
+                if (!subjectGroups[subject]) subjectGroups[subject] = {};
+                if (!subjectGroups[subject][question.baseId]) subjectGroups[subject][question.baseId] = [];
+                subjectGroups[subject][question.baseId].push(question);
             });
-            
+
             container.innerHTML = '';
-            
-            Object.entries(groupedQuestions).forEach(([baseId, questionGroup]) => {
-                const groupDiv = document.createElement('div');
-                groupDiv.className = 'question-item';
-                
-                let groupHTML = `
-                    <h3 style="font-weight: 600; font-size: 1.125rem; margin-bottom: 0.5rem;">Question ${baseId}</h3>
+
+            // Sort subjects alphabetically
+            Object.keys(subjectGroups).sort().forEach(subject => {
+                const subjectDiv = document.createElement('div');
+                subjectDiv.className = 'subject-group';
+
+                const subjectName = subject.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                const questionCount = Object.values(subjectGroups[subject]).flat().length;
+
+                subjectDiv.innerHTML = `
+                    <div class="subject-title" style="
+                        font-size: 1.25rem; 
+                        font-weight: 700; 
+                        background-color: #f3f4f6; 
+                        color: #1f2937; 
+                        padding: 8px 12px; 
+                        border-left: 4px solid #3b82f6; 
+                        margin-bottom: 8px;
+                        border-radius: 4px;
+                        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+                    ">
+                        ${subjectName} (${questionCount} questions)
+                    </div>
                 `;
-                
-                questionGroup.forEach(question => {
-                    const questionText = question.questionText.length > 100 
-                        ? question.questionText.substring(0, 100) + '...'
-                        : question.questionText;
-                        
-                    groupHTML += `
-                        <div style="background-color: #f9fafb; padding: 0.75rem; border-radius: 0.375rem; margin-bottom: 0.5rem;">
-                            <div class="question-badges">
-                                <span class="badge badge-blue">${question.questionId}</span>
-                                <span class="badge badge-green">${question.genre}</span>
-                                <span class="badge badge-purple">${question.type}</span>
-                            </div>
-                            <p style="font-size: 0.875rem; color: #374151;">${questionText.replace(/<[^>]*>/g, '')}</p>
-                            <div class="question-actions">
-                                <button class="btn btn-small btn-primary" onclick="editQuestion('${question._id}')">Edit</button>
-                                <button class="btn btn-small btn-success" onclick="duplicateQuestion('${question._id}')" title="Duplicate this question">Duplicate</button>
-                                <button class="btn btn-small btn-danger" onclick="deleteQuestion('${question._id}')">Delete</button>
-                            </div>
-                        </div>
+
+                // Loop over each baseId group within subject
+                Object.entries(subjectGroups[subject]).forEach(([baseId, questions]) => {
+                    const groupDiv = document.createElement('div');
+                    groupDiv.className = 'question-group';
+                    
+                    let groupHTML = `
+                        <h3 style="font-weight: 600; font-size: 1.125rem; margin-bottom: 0.5rem;">
+                            Question ${baseId}
+                        </h3>
                     `;
+
+                    // Render each question in this group
+                    questions.forEach(question => {
+                        const questionText = question.questionText.length > 100 
+                            ? question.questionText.substring(0, 100) + '...'
+                            : question.questionText;
+
+                        groupHTML += `
+                            <div style="background-color: #f9fafb; padding: 0.75rem; border-radius: 0.375rem; margin-bottom: 0.5rem;">
+                                <div class="question-badges">
+                                    <span class="badge badge-blue">${question.questionId}</span>
+                                    <span class="badge badge-green">${question.genre}</span>
+                                    <span class="badge badge-purple">${question.type}</span>
+                                </div>
+                                <p style="font-size: 0.875rem; color: #374151;">
+                                    ${questionText.replace(/<[^>]*>/g, '')}
+                                </p>
+                                <div class="question-actions">
+                                    <button class="btn btn-small btn-primary" onclick="editQuestion('${question._id}')">Edit</button>
+                                    <button class="btn btn-small btn-success" onclick="duplicateQuestion('${question._id}')" title="Duplicate this question">Duplicate</button>
+                                    <button class="btn btn-small btn-danger" onclick="deleteQuestion('${question._id}')">Delete</button>
+                                </div>
+                            </div>
+                        `;
+                    });
+
+                    groupDiv.innerHTML = groupHTML;
+                    subjectDiv.appendChild(groupDiv);
                 });
-                
-                groupDiv.innerHTML = groupHTML;
-                container.appendChild(groupDiv);
+
+                container.appendChild(subjectDiv);
             });
         }
 
+
+        // function renderQuestionsSelector() {
+        //     const container = document.getElementById('questions-selector');
+        //     container.innerHTML = '';
+            
+        //     if (dataStore.questions.length === 0) {
+        //         container.innerHTML = '<p style="color: #6b7280; text-align: center; padding: 1rem;">No questions available. Create some questions first!</p>';
+        //         return;
+        //     }
+            
+        //     // Group questions by base ID for better organization
+        //     const groupedQuestions = {};
+        //     dataStore.questions.forEach(question => {
+        //         if (!groupedQuestions[question.baseId]) {
+        //             groupedQuestions[question.baseId] = [];
+        //         }
+        //         groupedQuestions[question.baseId].push(question);
+        //     });
+            
+        //     // Sort base IDs numerically
+        //     const sortedBaseIds = Object.keys(groupedQuestions).sort((a, b) => {
+        //         const numA = parseInt(a) || 0;
+        //         const numB = parseInt(b) || 0;
+        //         return numA - numB;
+        //     });
+            
+        //     sortedBaseIds.forEach(baseId => {
+        //         const questions = groupedQuestions[baseId];
+                
+        //         // Create group container
+        //         const groupDiv = document.createElement('div');
+        //         groupDiv.className = 'question-group';
+        //         groupDiv.style.marginBottom = '1rem';
+        //         groupDiv.style.border = '1px solid #e5e7eb';
+        //         groupDiv.style.borderRadius = '0.375rem';
+        //         groupDiv.style.padding = '0.75rem';
+        //         groupDiv.style.backgroundColor = '#fafafa';
+                
+        //         // Group header with select all for this base ID
+        //         const headerDiv = document.createElement('div');
+        //         headerDiv.style.display = 'flex';
+        //         headerDiv.style.justifyContent = 'space-between';
+        //         headerDiv.style.alignItems = 'center';
+        //         headerDiv.style.marginBottom = '0.5rem';
+        //         headerDiv.innerHTML = `
+        //             <h4 style="font-weight: 600; color: #374151; margin: 0;">Question ${baseId} (${questions.length} variants)</h4>
+        //             <div style="display: flex; gap: 0.25rem;">
+        //                 <button type="button" class="btn btn-small btn-primary" onclick="selectBaseQuestions('${baseId}', true)">All</button>
+        //                 <button type="button" class="btn btn-small btn-secondary" onclick="selectBaseQuestions('${baseId}', false)">None</button>
+        //                 <button type="button" class="btn btn-small btn-success" onclick="selectOneFromBase('${baseId}')">Pick One</button>
+        //             </div>
+        //         `;
+        //         groupDiv.appendChild(headerDiv);
+                
+        //         // Individual question checkboxes
+        //         questions.forEach(question => {
+        //             const questionDiv = document.createElement('div');
+        //             questionDiv.className = 'question-item-selector';
+        //             questionDiv.setAttribute('data-genre', question.genre.toLowerCase());
+        //             questionDiv.setAttribute('data-text', (question.questionText + ' ' + question.genre).toLowerCase());
+        //             questionDiv.style.marginBottom = '0.5rem';
+        //             questionDiv.style.padding = '0.5rem';
+        //             questionDiv.style.backgroundColor = 'white';
+        //             questionDiv.style.borderRadius = '0.25rem';
+        //             questionDiv.style.border = '1px solid #e5e7eb';
+                    
+        //             const questionText = question.questionText.replace(/<[^>]*>/g, '').substring(0, 80);
+        //             const displayText = questionText.length > 80 ? questionText + '...' : questionText;
+                    
+        //             questionDiv.innerHTML = `
+        //                 <label style="display: flex; align-items: flex-start; cursor: pointer; width: 100%;">
+        //                     <input type="checkbox" value="${question._id}" 
+        //                            style="margin-right: 0.5rem; margin-top: 0.25rem; flex-shrink: 0;"
+        //                            onchange="updateSelectionCount()">
+        //                     <div style="flex: 1; min-width: 0;">
+        //                         <div style="display: flex; gap: 0.25rem; margin-bottom: 0.25rem;">
+        //                             <span class="badge badge-blue" style="font-size: 0.75rem;">${question.questionId}</span>
+        //                             <span class="badge badge-green" style="font-size: 0.75rem;">${question.genre}</span>
+        //                             <span class="badge badge-purple" style="font-size: 0.75rem;">${question.type}</span>
+        //                         </div>
+        //                         <span style="font-size: 0.875rem; color: #374151; line-height: 1.3;">
+        //                             ${displayText}
+        //                         </span>
+        //                     </div>
+        //                 </label>
+        //             `;
+                    
+        //             groupDiv.appendChild(questionDiv);
+        //         });
+                
+        //         container.appendChild(groupDiv);
+        //     });
+            
+        //     // Populate genre filter dropdown
+        //     populateGenreFilters();
+        //     updateSelectionCount();
+        // }
         function renderQuestionsSelector() {
             const container = document.getElementById('questions-selector');
+            const subjectFilter = document.getElementById('templateSubjectFilter')?.value || '';
+
+            // Filter by subject if applicable
+            let filteredQuestions = dataStore.questions;
+            if (subjectFilter) {
+                filteredQuestions = dataStore.questions.filter(q => q.subjectPool === subjectFilter);
+            }
+
             container.innerHTML = '';
-            
-            if (dataStore.questions.length === 0) {
+
+            if (filteredQuestions.length === 0) {
                 container.innerHTML = '<p style="color: #6b7280; text-align: center; padding: 1rem;">No questions available. Create some questions first!</p>';
                 return;
             }
-            
-            // Group questions by base ID for better organization
-            const groupedQuestions = {};
-            dataStore.questions.forEach(question => {
-                if (!groupedQuestions[question.baseId]) {
-                    groupedQuestions[question.baseId] = [];
-                }
-                groupedQuestions[question.baseId].push(question);
+
+            // Group questions first by subject, then by baseId
+            const subjectGroups = {};
+            filteredQuestions.forEach(question => {
+                const subject = question.subjectPool || 'uncategorized';
+                if (!subjectGroups[subject]) subjectGroups[subject] = {};
+                if (!subjectGroups[subject][question.baseId]) subjectGroups[subject][question.baseId] = [];
+                subjectGroups[subject][question.baseId].push(question);
             });
-            
-            // Sort base IDs numerically
-            const sortedBaseIds = Object.keys(groupedQuestions).sort((a, b) => {
-                const numA = parseInt(a) || 0;
-                const numB = parseInt(b) || 0;
-                return numA - numB;
-            });
-            
-            sortedBaseIds.forEach(baseId => {
-                const questions = groupedQuestions[baseId];
-                
-                // Create group container
-                const groupDiv = document.createElement('div');
-                groupDiv.className = 'question-group';
-                groupDiv.style.marginBottom = '1rem';
-                groupDiv.style.border = '1px solid #e5e7eb';
-                groupDiv.style.borderRadius = '0.375rem';
-                groupDiv.style.padding = '0.75rem';
-                groupDiv.style.backgroundColor = '#fafafa';
-                
-                // Group header with select all for this base ID
-                const headerDiv = document.createElement('div');
-                headerDiv.style.display = 'flex';
-                headerDiv.style.justifyContent = 'space-between';
-                headerDiv.style.alignItems = 'center';
-                headerDiv.style.marginBottom = '0.5rem';
-                headerDiv.innerHTML = `
-                    <h4 style="font-weight: 600; color: #374151; margin: 0;">Question ${baseId} (${questions.length} variants)</h4>
-                    <div style="display: flex; gap: 0.25rem;">
-                        <button type="button" class="btn btn-small btn-primary" onclick="selectBaseQuestions('${baseId}', true)">All</button>
-                        <button type="button" class="btn btn-small btn-secondary" onclick="selectBaseQuestions('${baseId}', false)">None</button>
-                        <button type="button" class="btn btn-small btn-success" onclick="selectOneFromBase('${baseId}')">Pick One</button>
+
+            // Render subjects
+            Object.keys(subjectGroups).sort().forEach(subject => {
+                const subjectDiv = document.createElement('div');
+                subjectDiv.className = 'subject-group';
+                subjectDiv.style.marginBottom = '1.5rem';
+
+                const subjectName = subject.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                const questionCount = Object.values(subjectGroups[subject]).flat().length;
+
+                subjectDiv.innerHTML = `
+                    <div class="subject-title" style="font-weight: 600; font-size: 1.125rem; margin-bottom: 0.5rem;">
+                        ${subjectName} (${questionCount} questions)
                     </div>
                 `;
-                groupDiv.appendChild(headerDiv);
-                
-                // Individual question checkboxes
-                questions.forEach(question => {
-                    const questionDiv = document.createElement('div');
-                    questionDiv.className = 'question-item-selector';
-                    questionDiv.setAttribute('data-genre', question.genre.toLowerCase());
-                    questionDiv.setAttribute('data-text', (question.questionText + ' ' + question.genre).toLowerCase());
-                    questionDiv.style.marginBottom = '0.5rem';
-                    questionDiv.style.padding = '0.5rem';
-                    questionDiv.style.backgroundColor = 'white';
-                    questionDiv.style.borderRadius = '0.25rem';
-                    questionDiv.style.border = '1px solid #e5e7eb';
-                    
-                    const questionText = question.questionText.replace(/<[^>]*>/g, '').substring(0, 80);
-                    const displayText = questionText.length > 80 ? questionText + '...' : questionText;
-                    
-                    questionDiv.innerHTML = `
-                        <label style="display: flex; align-items: flex-start; cursor: pointer; width: 100%;">
-                            <input type="checkbox" value="${question._id}" 
-                                   style="margin-right: 0.5rem; margin-top: 0.25rem; flex-shrink: 0;"
-                                   onchange="updateSelectionCount()">
-                            <div style="flex: 1; min-width: 0;">
-                                <div style="display: flex; gap: 0.25rem; margin-bottom: 0.25rem;">
-                                    <span class="badge badge-blue" style="font-size: 0.75rem;">${question.questionId}</span>
-                                    <span class="badge badge-green" style="font-size: 0.75rem;">${question.genre}</span>
-                                    <span class="badge badge-purple" style="font-size: 0.75rem;">${question.type}</span>
-                                </div>
-                                <span style="font-size: 0.875rem; color: #374151; line-height: 1.3;">
-                                    ${displayText}
-                                </span>
-                            </div>
-                        </label>
-                    `;
-                    
-                    groupDiv.appendChild(questionDiv);
+
+                // Sort baseIds numerically inside each subject
+                const sortedBaseIds = Object.keys(subjectGroups[subject]).sort((a, b) => {
+                    const numA = parseInt(a) || 0;
+                    const numB = parseInt(b) || 0;
+                    return numA - numB;
                 });
-                
-                container.appendChild(groupDiv);
+
+                // Render each baseId group
+                sortedBaseIds.forEach(baseId => {
+                    const questions = subjectGroups[subject][baseId];
+
+                    // Group container
+                    const groupDiv = document.createElement('div');
+                    groupDiv.className = 'question-group';
+                    groupDiv.style.marginBottom = '1rem';
+                    groupDiv.style.border = '1px solid #e5e7eb';
+                    groupDiv.style.borderRadius = '0.375rem';
+                    groupDiv.style.padding = '0.75rem';
+                    groupDiv.style.backgroundColor = '#fafafa';
+
+                    // Header with selection controls
+                    const headerDiv = document.createElement('div');
+                    headerDiv.style.display = 'flex';
+                    headerDiv.style.justifyContent = 'space-between';
+                    headerDiv.style.alignItems = 'center';
+                    headerDiv.style.marginBottom = '0.5rem';
+                    headerDiv.innerHTML = `
+                        <h4 style="font-weight: 600; color: #374151; margin: 0;">
+                            Question ${baseId} (${questions.length} variants)
+                        </h4>
+                        <div style="display: flex; gap: 0.25rem;">
+                            <button type="button" class="btn btn-small btn-primary" onclick="selectBaseQuestions('${baseId}', true)">All</button>
+                            <button type="button" class="btn btn-small btn-secondary" onclick="selectBaseQuestions('${baseId}', false)">None</button>
+                            <button type="button" class="btn btn-small btn-success" onclick="selectOneFromBase('${baseId}')">Pick One</button>
+                        </div>
+                    `;
+                    groupDiv.appendChild(headerDiv);
+
+                    // Render each question checkbox
+                    questions.forEach(question => {
+                        const questionDiv = document.createElement('div');
+                        questionDiv.className = 'question-item-selector';
+                        questionDiv.setAttribute('data-genre', question.genre.toLowerCase());
+                        questionDiv.setAttribute('data-text', (question.questionText + ' ' + question.genre).toLowerCase());
+                        questionDiv.style.marginBottom = '0.5rem';
+                        questionDiv.style.padding = '0.5rem';
+                        questionDiv.style.backgroundColor = 'white';
+                        questionDiv.style.borderRadius = '0.25rem';
+                        questionDiv.style.border = '1px solid #e5e7eb';
+
+                        const questionText = question.questionText.replace(/<[^>]*>/g, '').substring(0, 80);
+                        const displayText = questionText.length > 80 ? questionText + '...' : questionText;
+
+                        questionDiv.innerHTML = `
+                            <label style="display: flex; align-items: flex-start; cursor: pointer; width: 100%;">
+                                <input type="checkbox" value="${question._id}" 
+                                    style="margin-right: 0.5rem; margin-top: 0.25rem; flex-shrink: 0;"
+                                    onchange="updateSelectionCount()">
+                                <div style="flex: 1; min-width: 0;">
+                                    <div style="display: flex; gap: 0.25rem; margin-bottom: 0.25rem;">
+                                        <span class="badge badge-blue" style="font-size: 0.75rem;">${question.questionId}</span>
+                                        <span class="badge badge-green" style="font-size: 0.75rem;">${question.genre}</span>
+                                        <span class="badge badge-purple" style="font-size: 0.75rem;">${question.type}</span>
+                                    </div>
+                                    <span style="font-size: 0.875rem; color: #374151; line-height: 1.3;">
+                                        ${displayText}
+                                    </span>
+                                </div>
+                            </label>
+                        `;
+
+                        groupDiv.appendChild(questionDiv);
+                    });
+
+                    subjectDiv.appendChild(groupDiv);
+                });
+
+                container.appendChild(subjectDiv);
             });
-            
-            // Populate genre filter dropdown
+
+            // Update filters and counts
             populateGenreFilters();
             updateSelectionCount();
         }
+
 
         function duplicateQuestion(questionId) {
             const originalQuestion = dataStore.questions.find(q => q._id === questionId);
@@ -1829,6 +2400,7 @@
                 baseId: newBaseId,
                 variant: newVariant,
                 genre: originalQuestion.genre,
+                subjectPool: originalQuestion.subjectPool || 'uncategorized',
                 type: originalQuestion.type,
                 questionText: originalQuestion.questionText,
                 questionImage: originalQuestion.questionImage,
