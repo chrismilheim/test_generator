@@ -834,7 +834,10 @@
                     <div class="format-toolbar">
                         <button type="button" class="format-btn" onclick="formatText('option-${index}', 'bold')"><b>B</b></button>
                         <button type="button" class="format-btn" onclick="formatText('option-${index}', 'underline')"><u>U</u></button>
+                        <button type="button" class="format-btn" onclick="formatText('option-${index}', 'superscript')">X²</button>
+                        <button type="button" class="format-btn" onclick="formatText('option-${index}', 'subscript')">X₂</button>
                     </div>
+
                     <textarea id="option-${index}" class="form-textarea" oninput="updatePreview('option-${index}', 'option-preview-${index}')"></textarea>
                     <div class="preview">Preview: <span id="option-preview-${index}"></span></div>
                     <input type="file" class="form-input" accept="image/*" onchange="handleImageUpload('option-${index}-image')" style="margin-top: 0.5rem;">
@@ -883,23 +886,61 @@
         // }
 
         // Text formatting functions
+        // function formatText(textareaId, format) {
+        //     const textarea = document.getElementById(textareaId);
+        //     const start = textarea.selectionStart;
+        //     const end = textarea.selectionEnd;
+        //     const selectedText = textarea.value.substring(start, end);
+            
+        //     if (selectedText) {
+        //         const tag = format === 'bold' ? 'b' : 'u';
+        //         const formattedText = `<${tag}>${selectedText}</${tag}>`;
+        //         const newValue = textarea.value.substring(0, start) + formattedText + textarea.value.substring(end);
+        //         textarea.value = newValue;
+                
+        //         // Update preview
+        //         const previewId = textareaId.replace('option-', 'option-preview-').replace('questionText', 'questionPreview');
+        //         updatePreview(textareaId, previewId);
+        //     }
+        // }
+
         function formatText(textareaId, format) {
             const textarea = document.getElementById(textareaId);
             const start = textarea.selectionStart;
             const end = textarea.selectionEnd;
             const selectedText = textarea.value.substring(start, end);
-            
-            if (selectedText) {
-                const tag = format === 'bold' ? 'b' : 'u';
-                const formattedText = `<${tag}>${selectedText}</${tag}>`;
-                const newValue = textarea.value.substring(0, start) + formattedText + textarea.value.substring(end);
-                textarea.value = newValue;
-                
-                // Update preview
-                const previewId = textareaId.replace('option-', 'option-preview-').replace('questionText', 'questionPreview');
-                updatePreview(textareaId, previewId);
+
+            if (!selectedText) return;
+
+            let tag;
+            switch (format) {
+                case 'bold':
+                    tag = 'b';
+                    break;
+                case 'underline':
+                    tag = 'u';
+                    break;
+                case 'superscript':
+                    tag = 'sup';
+                    break;
+                case 'subscript':
+                    tag = 'sub';
+                    break;
+                default:
+                    return;
             }
+
+            const formattedText = `<${tag}>${selectedText}</${tag}>`;
+            const newValue = textarea.value.substring(0, start) + formattedText + textarea.value.substring(end);
+            textarea.value = newValue;
+
+            // Update preview
+            const previewId = textareaId
+                .replace('option-', 'option-preview-')
+                .replace('questionText', 'questionPreview');
+            updatePreview(textareaId, previewId);
         }
+
 
         function updatePreview(textareaId, previewId) {
             const textarea = document.getElementById(textareaId);
@@ -1736,8 +1777,7 @@
         // Helper function to process formatted text for PDF
         function addFormattedTextToPDF(doc, text, x, y, maxWidth = 160) {
             if (!text) return { finalY: y, lines: 0 };
-            
-            // Parse the text for formatting tags
+
             const segments = parseFormattedText(text);
             const lineHeight = 5;
             let currentY = y;
@@ -1745,111 +1785,149 @@
             const lines = [];
             let currentLine = [];
             let currentLineWidth = 0;
-            
+
             segments.forEach(segment => {
-                const words = segment.text.split(' ');
-                
-                words.forEach((word, wordIndex) => {
-                    if (wordIndex > 0) word = ' ' + word; // Add space back except for first word
-                    
+                const words = segment.text.split(/(\s+)/); // preserve spaces
+                words.forEach(word => {
+                    if (!word) return;
+
                     const wordWidth = getTextWidth(doc, word, segment.bold, segment.underline);
-                    
-                    // Check if word fits on current line
                     if (currentLineWidth + wordWidth > maxWidth && currentLine.length > 0) {
-                        // Start new line
                         lines.push([...currentLine]);
-                        currentLine = [{ text: word.trim(), bold: segment.bold, underline: segment.underline }];
-                        currentLineWidth = getTextWidth(doc, word.trim(), segment.bold, segment.underline);
+                        currentLine = [{ ...segment, text: word }];
+                        currentLineWidth = wordWidth;
                     } else {
-                        // Add to current line
-                        if (currentLine.length > 0 && word.startsWith(' ')) {
-                            currentLine.push({ text: word, bold: segment.bold, underline: segment.underline });
-                        } else {
-                            currentLine.push({ text: word.trim(), bold: segment.bold, underline: segment.underline });
-                        }
+                        currentLine.push({ ...segment, text: word });
                         currentLineWidth += wordWidth;
                     }
                 });
             });
-            
-            // Add the last line
+
             if (currentLine.length > 0) {
                 lines.push(currentLine);
             }
-            
+
             // Render all lines
             lines.forEach(line => {
                 currentX = x;
                 line.forEach(segment => {
-                    // Set font style
-                    if (segment.bold) {
-                        doc.setFont(undefined, 'bold');
-                    } else {
-                        doc.setFont(undefined, 'normal');
-                    }
-                    
-                    // Add text
-                    doc.text(segment.text, currentX, currentY);
-                    
-                    // Add underline if needed
+                    // Set font
+                    doc.setFont(undefined, segment.bold ? 'bold' : 'normal');
+
+                    // Handle subscript/superscript
+                    let renderY = currentY;
+                    if (segment.superscript) renderY -= 2; // move text up
+                    if (segment.subscript) renderY += 2;   // move text down
+
+                    // Draw text
+                    doc.text(segment.text, currentX, renderY);
+
+                    // Draw underline
                     if (segment.underline) {
                         const textWidth = doc.getTextWidth(segment.text);
-                        doc.line(currentX, currentY + 1, currentX + textWidth, currentY + 1);
+                        doc.line(currentX, renderY + 1, currentX + textWidth, renderY + 1);
                     }
-                    
-                    // Move x position
+
                     currentX += doc.getTextWidth(segment.text);
                 });
                 currentY += lineHeight;
             });
-            
+
             return { finalY: currentY, lines: lines.length };
         }
         
+        // function parseFormattedText(text) {
+        //     const segments = [];
+        //     let currentIndex = 0;
+            
+        //     // Regular expression to find formatting tags
+        //     const formatRegex = /<(b|u)>(.*?)<\/\1>/g;
+        //     let match;
+            
+        //     while ((match = formatRegex.exec(text)) !== null) {
+        //         // Add text before the tag
+        //         if (match.index > currentIndex) {
+        //             const beforeText = text.substring(currentIndex, match.index);
+        //             if (beforeText) {
+        //                 segments.push({ text: beforeText, bold: false, underline: false });
+        //             }
+        //         }
+                
+        //         // Add the formatted text
+        //         const tag = match[1];
+        //         const content = match[2];
+        //         if (content) {
+        //             segments.push({
+        //                 text: content,
+        //                 bold: tag === 'b',
+        //                 underline: tag === 'u'
+        //             });
+        //         }
+                
+        //         currentIndex = formatRegex.lastIndex;
+        //     }
+            
+        //     // Add remaining text
+        //     if (currentIndex < text.length) {
+        //         const remainingText = text.substring(currentIndex);
+        //         if (remainingText) {
+        //             segments.push({ text: remainingText, bold: false, underline: false });
+        //         }
+        //     }
+            
+        //     // If no formatting found, return the whole text
+        //     if (segments.length === 0) {
+        //         segments.push({ text: text, bold: false, underline: false });
+        //     }
+            
+        //     return segments;
+        // }
+
         function parseFormattedText(text) {
             const segments = [];
-            let currentIndex = 0;
-            
-            // Regular expression to find formatting tags
-            const formatRegex = /<(b|u)>(.*?)<\/\1>/g;
+            const tagRegex = /<(b|u|sup|sub)>(.*?)<\/\1>/gi;
+            let lastIndex = 0;
             let match;
-            
-            while ((match = formatRegex.exec(text)) !== null) {
+
+            while ((match = tagRegex.exec(text)) !== null) {
                 // Add text before the tag
-                if (match.index > currentIndex) {
-                    const beforeText = text.substring(currentIndex, match.index);
-                    if (beforeText) {
-                        segments.push({ text: beforeText, bold: false, underline: false });
-                    }
+                if (match.index > lastIndex) {
+                    segments.push({
+                        text: text.substring(lastIndex, match.index),
+                        bold: false,
+                        underline: false,
+                        superscript: false,
+                        subscript: false
+                    });
                 }
-                
-                // Add the formatted text
-                const tag = match[1];
+
+                const tag = match[1].toLowerCase();
                 const content = match[2];
+
                 if (content) {
                     segments.push({
                         text: content,
                         bold: tag === 'b',
-                        underline: tag === 'u'
+                        underline: tag === 'u',
+                        superscript: tag === 'sup',
+                        subscript: tag === 'sub'
                     });
                 }
-                
-                currentIndex = formatRegex.lastIndex;
+
+                lastIndex = tagRegex.lastIndex;
             }
-            
-            // Add remaining text
-            if (currentIndex < text.length) {
-                const remainingText = text.substring(currentIndex);
-                if (remainingText) {
-                    segments.push({ text: remainingText, bold: false, underline: false });
-                }
+
+            // Remaining text
+            if (lastIndex < text.length) {
+                segments.push({
+                    text: text.substring(lastIndex),
+                    bold: false,
+                    underline: false,
+                    superscript: false,
+                    subscript: false
+                });
             }
-            
-            // If no formatting found, return the whole text
-            if (segments.length === 0) {
-                segments.push({ text: text, bold: false, underline: false });
-            }
-            
+
             return segments;
         }
         
