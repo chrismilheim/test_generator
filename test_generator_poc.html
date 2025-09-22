@@ -6,6 +6,10 @@
     <title>Test Generator - Proof of Concept</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/uuid/8.3.2/uuid.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/docx@7.3.0/build/index.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/file-saver/2.0.5/FileSaver.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -649,64 +653,146 @@
     </div>
 
     <script>
-        // Data storage using localStorage
+        // // Data storage using localStorage
+        // class DataStore {
+        //     constructor() {
+        //         this.questions = JSON.parse(localStorage.getItem('testgen_questions') || '[]');
+        //         this.templates = JSON.parse(localStorage.getItem('testgen_templates') || '[]');
+        //         this.generatedTests = JSON.parse(localStorage.getItem('testgen_generated') || '[]');
+        //     }
+
+        //     save() {
+        //         localStorage.setItem('testgen_questions', JSON.stringify(this.questions));
+        //         localStorage.setItem('testgen_templates', JSON.stringify(this.templates));
+        //         localStorage.setItem('testgen_generated', JSON.stringify(this.generatedTests));
+        //     }
+
+        //     addQuestion(question) {
+        //         question._id = uuid.v4();
+        //         question.createdAt = new Date().toISOString();
+        //         this.questions.push(question);
+        //         this.save();
+        //         return question;
+        //     }
+
+        //     updateQuestion(id, updatedQuestion) {
+        //         const index = this.questions.findIndex(q => q._id === id);
+        //         if (index !== -1) {
+        //             this.questions[index] = { ...this.questions[index], ...updatedQuestion };
+        //             this.save();
+        //             return this.questions[index];
+        //         }
+        //         return null;
+        //     }
+
+        //     deleteQuestion(id) {
+        //         this.questions = this.questions.filter(q => q._id !== id);
+        //         this.save();
+        //     }
+
+        //     addTemplate(template) {
+        //         template._id = uuid.v4();
+        //         template.createdAt = new Date().toISOString();
+        //         this.templates.push(template);
+        //         this.save();
+        //         return template;
+        //     }
+
+        //     addGeneratedTest(test) {
+        //         test._id = uuid.v4();
+        //         test.createdAt = new Date().toISOString();
+        //         this.generatedTests.push(test);
+        //         this.save();
+        //         return test;
+        //     }
+        // }
+
+        // // Global variables
+        // let dataStore = new DataStore();
+        // let editingQuestionId = null;
+        // let currentImages = {}; // Store base64 images
+
+        // Data storage using IndexedDB via localForage
         class DataStore {
             constructor() {
-                this.questions = JSON.parse(localStorage.getItem('testgen_questions') || '[]');
-                this.templates = JSON.parse(localStorage.getItem('testgen_templates') || '[]');
-                this.generatedTests = JSON.parse(localStorage.getItem('testgen_generated') || '[]');
+                this.questions = [];
+                this.templates = [];
+                this.generatedTests = [];
+                this.initialized = this.load(); // async init
             }
 
-            save() {
-                localStorage.setItem('testgen_questions', JSON.stringify(this.questions));
-                localStorage.setItem('testgen_templates', JSON.stringify(this.templates));
-                localStorage.setItem('testgen_generated', JSON.stringify(this.generatedTests));
+            async load() {
+                this.questions = (await localforage.getItem('testgen_questions')) || [];
+                this.templates = (await localforage.getItem('testgen_templates')) || [];
+                this.generatedTests = (await localforage.getItem('testgen_generated')) || [];
             }
 
-            addQuestion(question) {
+            async save() {
+                await localforage.setItem('testgen_questions', this.questions);
+                await localforage.setItem('testgen_templates', this.templates);
+                await localforage.setItem('testgen_generated', this.generatedTests);
+            }
+
+            async addQuestion(question) {
+                await this.initialized;
                 question._id = uuid.v4();
                 question.createdAt = new Date().toISOString();
                 this.questions.push(question);
-                this.save();
+                await this.save();
                 return question;
             }
 
-            updateQuestion(id, updatedQuestion) {
+            async updateQuestion(id, updatedQuestion) {
+                await this.initialized;
                 const index = this.questions.findIndex(q => q._id === id);
                 if (index !== -1) {
                     this.questions[index] = { ...this.questions[index], ...updatedQuestion };
-                    this.save();
+                    await this.save();
                     return this.questions[index];
                 }
                 return null;
             }
 
-            deleteQuestion(id) {
+            async deleteQuestion(id) {
+                await this.initialized;
                 this.questions = this.questions.filter(q => q._id !== id);
-                this.save();
+                await this.save();
             }
 
-            addTemplate(template) {
+            async addTemplate(template) {
+                await this.initialized;
                 template._id = uuid.v4();
                 template.createdAt = new Date().toISOString();
                 this.templates.push(template);
-                this.save();
+                await this.save();
                 return template;
             }
 
-            addGeneratedTest(test) {
+            async addGeneratedTest(test) {
+                await this.initialized;
                 test._id = uuid.v4();
                 test.createdAt = new Date().toISOString();
                 this.generatedTests.push(test);
-                this.save();
+                await this.save();
                 return test;
             }
         }
 
         // Global variables
-        let dataStore = new DataStore();
+        //let dataStore = new DataStore();
+        let dataStore;  // declare global but don't fill yet
+
+        async function initApp() {
+            dataStore = new DataStore();
+            await dataStore.load();               // <-- THIS populates .questions
+            console.log("Loaded questions:", dataStore.questions); 
+            renderQuestionsLibrary();
+        }
+
+        document.addEventListener("DOMContentLoaded", initApp);
         let editingQuestionId = null;
         let currentImages = {}; // Store base64 images
+
 
         // Initialize the app
         document.addEventListener('DOMContentLoaded', function() {
@@ -1401,11 +1487,11 @@
         }
 
         // Template functions
-        function handleTemplateSubmit(e) {
+        async function handleTemplateSubmit(e) {
             e.preventDefault();
             showLoading(true);
             
-            setTimeout(() => {
+            setTimeout(async () => {
                 const selectedQuestions = [];
                 document.querySelectorAll('#questions-selector input:checked').forEach(checkbox => {
                     selectedQuestions.push(checkbox.value);
@@ -1426,7 +1512,7 @@
                 
                 console.log('Template data:', templateData); // Debug log
                 
-                dataStore.addTemplate(templateData);
+                const savedTemplate = await dataStore.addTemplate(templateData);
                 
                 // Clear form
                 document.getElementById('template-form').reset();
@@ -1528,95 +1614,95 @@
         // }
 
         function generateTests(templateId, numberOfTests) {
-    const template = dataStore.templates.find(t => t._id === templateId);
-    if (!template) return;
+            const template = dataStore.templates.find(t => t._id === templateId);
+            if (!template) return;
 
-    showLoading(true);
+            showLoading(true);
 
-    setTimeout(() => {
-        // Group questions by subject pool first, then by base ID
-        const subjectGroups = {};
-        template.questions.forEach(qId => {
-            const question = dataStore.questions.find(q => q._id === qId);
-            if (!question) return;
+            setTimeout(() => {
+                // Group questions by subject pool first, then by base ID
+                const subjectGroups = {};
+                template.questions.forEach(qId => {
+                    const question = dataStore.questions.find(q => q._id === qId);
+                    if (!question) return;
 
-            const subject = question.subjectPool || 'uncategorized';
-            if (!subjectGroups[subject]) subjectGroups[subject] = {};
-            if (!subjectGroups[subject][question.baseId]) subjectGroups[subject][question.baseId] = [];
+                    const subject = question.subjectPool || 'uncategorized';
+                    if (!subjectGroups[subject]) subjectGroups[subject] = {};
+                    if (!subjectGroups[subject][question.baseId]) subjectGroups[subject][question.baseId] = [];
 
-            subjectGroups[subject][question.baseId].push(question);
-        });
+                    subjectGroups[subject][question.baseId].push(question);
+                });
 
-        // Keep track of rotation per subject/baseID to minimize repetition
-        const rotationIndexes = {};
-        Object.keys(subjectGroups).forEach(subject => {
-            rotationIndexes[subject] = {};
-            Object.keys(subjectGroups[subject]).forEach(baseId => {
-                rotationIndexes[subject][baseId] = 0;
-            });
-        });
-
-        for (let testIndex = 0; testIndex < numberOfTests; testIndex++) {
-            const testQuestions = [];
-
-            // Process subjects alphabetically for consistency
-            Object.keys(subjectGroups).sort().forEach(subject => {
-                const baseGroups = subjectGroups[subject];
-
-                Object.keys(baseGroups).sort((a, b) => (parseInt(a) || 0) - (parseInt(b) || 0))
-                    .forEach(baseId => {
-                        const variants = baseGroups[baseId];
-                        const rotationIndex = rotationIndexes[subject][baseId];
-
-                        // Systematically select variant
-                        const selectedQuestion = variants[rotationIndex % variants.length];
-
-                        // Increment rotation for next test
-                        rotationIndexes[subject][baseId] = rotationIndex + 1;
-
-                        testQuestions.push({
-                            questionId: selectedQuestion.questionId,
-                            baseId: selectedQuestion.baseId,
-                            subjectPool: selectedQuestion.subjectPool,
-                            questionText: selectedQuestion.questionText,
-                            questionImage: selectedQuestion.questionImage,
-                            type: selectedQuestion.type,
-                            options: selectedQuestion.options,
-                            correctAnswer: selectedQuestion.correctAnswer,
-                            correctAnswerNote: selectedQuestion.correctAnswerNote,
-                            correctAnswerNoteImage: selectedQuestion.correctAnswerNoteImage
-                        });
+                // Keep track of rotation per subject/baseID to minimize repetition
+                const rotationIndexes = {};
+                Object.keys(subjectGroups).forEach(subject => {
+                    rotationIndexes[subject] = {};
+                    Object.keys(subjectGroups[subject]).forEach(baseId => {
+                        rotationIndexes[subject][baseId] = 0;
                     });
-            });
+                });
 
-            // Sort questions by subject + base ID for consistent PDF order
-            testQuestions.sort((a, b) => {
-                if (a.subjectPool !== b.subjectPool) return a.subjectPool.localeCompare(b.subjectPool);
-                const aBase = parseInt(a.baseId) || 0;
-                const bBase = parseInt(b.baseId) || 0;
-                return aBase - bBase;
-            });
+                for (let testIndex = 0; testIndex < numberOfTests; testIndex++) {
+                    const testQuestions = [];
 
-            const generatedTest = {
-                templateId: templateId,
-                testNumber: testIndex + 1,
-                title: template.title,
-                header: template.header,
-                instructions: template.instructions,
-                questions: testQuestions
-            };
+                    // Process subjects alphabetically for consistency
+                    Object.keys(subjectGroups).sort().forEach(subject => {
+                        const baseGroups = subjectGroups[subject];
 
-            dataStore.addGeneratedTest(generatedTest);
+                        Object.keys(baseGroups).sort((a, b) => (parseInt(a) || 0) - (parseInt(b) || 0))
+                            .forEach(baseId => {
+                                const variants = baseGroups[baseId];
+                                const rotationIndex = rotationIndexes[subject][baseId];
+
+                                // Systematically select variant
+                                const selectedQuestion = variants[rotationIndex % variants.length];
+
+                                // Increment rotation for next test
+                                rotationIndexes[subject][baseId] = rotationIndex + 1;
+
+                                testQuestions.push({
+                                    questionId: selectedQuestion.questionId,
+                                    baseId: selectedQuestion.baseId,
+                                    subjectPool: selectedQuestion.subjectPool,
+                                    questionText: selectedQuestion.questionText,
+                                    questionImage: selectedQuestion.questionImage,
+                                    type: selectedQuestion.type,
+                                    options: selectedQuestion.options,
+                                    correctAnswer: selectedQuestion.correctAnswer,
+                                    correctAnswerNote: selectedQuestion.correctAnswerNote,
+                                    correctAnswerNoteImage: selectedQuestion.correctAnswerNoteImage
+                                });
+                            });
+                    });
+
+                    // Sort questions by subject + base ID for consistent PDF order
+                    testQuestions.sort((a, b) => {
+                        if (a.subjectPool !== b.subjectPool) return a.subjectPool.localeCompare(b.subjectPool);
+                        const aBase = parseInt(a.baseId) || 0;
+                        const bBase = parseInt(b.baseId) || 0;
+                        return aBase - bBase;
+                    });
+
+                    const generatedTest = {
+                        templateId: templateId,
+                        testNumber: testIndex + 1,
+                        title: template.title,
+                        header: template.header,
+                        instructions: template.instructions,
+                        questions: testQuestions
+                    };
+
+                    dataStore.addGeneratedTest(generatedTest);
+                }
+
+                renderGeneratedTestsList();
+                updateGeneratedTestsStats();
+                showLoading(false);
+
+                // Show detailed generation summary
+                showTestGenerationSummary(subjectGroups, numberOfTests);
+            }, 1000);
         }
-
-        renderGeneratedTestsList();
-        updateGeneratedTestsStats();
-        showLoading(false);
-
-        // Show detailed generation summary
-        showTestGenerationSummary(subjectGroups, numberOfTests);
-    }, 1000);
-}
 
         
         function showTestGenerationSummary(questionGroups, numberOfTests) {
@@ -1654,6 +1740,26 @@
             summary += `Download PDFs from the Generated Tests tab.`;
             
             alert(summary);
+        }
+
+        async function downloadTestDocx(testId, format = 'docx') {
+            const test = dataStore.generatedTests.find(t => t._id === testId);
+            if (!test) return;
+            
+            if (format === 'docx') {
+                try {
+                    const blob = await generateDocx(test);
+                    const safeTitle = test.title.replace(/[^a-zA-Z0-9]/g, '_');
+                    const filename = `${safeTitle}_v${test.testNumber}_Test.docx`;
+                    saveAs(blob, filename);
+                } catch (error) {
+                    console.error('Error generating DOCX:', error);
+                    alert('Error generating DOCX file. Please try again.');
+                }
+            } else {
+                // Your existing PDF generation code
+                alert(`PDF would be generated for: ${test.title} - Version ${test.testNumber}`);
+            }
         }
 
         // PDF Generation using jsPDF with image support
@@ -2157,6 +2263,127 @@
             const width = doc.getTextWidth(text);
             return width;
         }
+
+        async function generateDocx(test) {
+    const { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, ImageRun } = docx;
+
+    // Helper: convert base64 data URL to Uint8Array
+    function base64ToUint8Array(base64) {
+        const base64Data = base64.includes(',') ? base64.split(',')[1] : base64;
+        const binary = atob(base64Data);
+        const len = binary.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
+        return bytes;
+    }
+
+    const doc = new Document({
+        sections: [{
+            properties: {},
+            children: [
+                // Title
+                new Paragraph({
+                    text: test.title,
+                    heading: HeadingLevel.TITLE,
+                    alignment: AlignmentType.CENTER
+                }),
+                // Version
+                new Paragraph({
+                    text: `Version ${test.testNumber}`,
+                    alignment: AlignmentType.CENTER,
+                    spacing: { after: 400 }
+                }),
+                // Header
+                ...(test.header ? [new Paragraph({
+                    text: test.header,
+                    alignment: AlignmentType.CENTER,
+                    spacing: { after: 200 }
+                })] : []),
+                // Instructions
+                ...(test.instructions ? [new Paragraph({
+                    text: test.instructions,
+                    spacing: { after: 400 }
+                })] : []),
+                // Questions
+                ...test.questions.flatMap((question, qIndex) => {
+                    const children = [
+                        new Paragraph({
+                            children: [
+                                new TextRun({ text: `${qIndex + 1}. `, bold: true }),
+                                new TextRun({ text: question.questionText.replace(/<[^>]*>/g, '') })
+                            ],
+                            spacing: { before: 200, after: 100 }
+                        })
+                    ];
+
+                    // Multiple-choice options
+                    if (question.type === 'multiple-choice') {
+                        question.options.forEach(option => {
+                            const letter = String.fromCharCode(65 + option.optionIndex);
+                            const optionChildren = [
+                                new TextRun({ text: `${letter}. ${option.text} ` })
+                            ];
+
+                            // Add images inline
+                            if (option.images && option.images.length) {
+                                option.images.forEach(imgBase64 => {
+                                    try {
+                                        const imageRun = new ImageRun({
+                                            data: base64ToUint8Array(imgBase64),
+                                            transformation: { width: 100, height: 100 }
+                                        });
+                                        optionChildren.push(imageRun);
+                                    } catch (e) {
+                                        console.warn("Failed to add image:", e);
+                                    }
+                                });
+                            }
+
+                            children.push(new Paragraph({
+                                children: optionChildren,
+                                indent: { left: 400 },
+                                spacing: { after: 50 }
+                            }));
+                        });
+                    } else {
+                        // Short answer: blank lines
+                        for (let i = 0; i < 3; i++) {
+                            children.push(new Paragraph({
+                                text: "_".repeat(50),
+                                indent: { left: 400 },
+                                spacing: { after: 100 }
+                            }));
+                        }
+
+                        // Add question images (if any)
+                        if (question.images && question.images.length) {
+                            const imageParagraphs = question.images.map(imgBase64 => new Paragraph({
+                                children: [
+                                    new ImageRun({
+                                        data: base64ToUint8Array(imgBase64),
+                                        transformation: { width: 150, height: 100 }
+                                    })
+                                ],
+                                spacing: { after: 100 }
+                            }));
+                            children.push(...imageParagraphs);
+                        }
+                    }
+
+                    return children;
+                })
+            ]
+        }]
+    });
+
+    return await Packer.toBlob(doc);
+}
+
+
+
+
+
+
 
         // Render functions
         // function renderQuestionsLibrary() {
@@ -2823,8 +3050,9 @@
                     <td>
                         <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
                             <button class="btn btn-small btn-primary" onclick="downloadTest('${test._id}', 'test')" title="Download Test PDF">
-                                📄 Test
+                                📄 PDF Test 
                             </button>
+                            <button class="btn btn-small btn-primary" onclick="downloadTestDocx('${test._id}', 'docx')">🟦 DOCX Test</button>
                             <button class="btn btn-small btn-success" onclick="downloadTest('${test._id}', 'answer-key')" title="Download Answer Key PDF">
                                 🔑 Answer Key
                             </button>
