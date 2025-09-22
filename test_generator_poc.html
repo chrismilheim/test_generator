@@ -839,6 +839,7 @@
                         <input type="checkbox" id="correct-${index}" onchange="handleCorrectAnswer(${index})">
                         <label for="correct-${index}" class="text-sm" style="color: #6b7280;">Correct Answer</label>
                     </div>
+                    
                     <div class="format-toolbar">
                         <button type="button" class="format-btn" onclick="formatText('option-${index}', 'bold')"><b>B</b></button>
                         <button type="button" class="format-btn" onclick="formatText('option-${index}', 'underline')"><u>U</u></button>
@@ -848,18 +849,114 @@
 
                     <textarea id="option-${index}" class="form-textarea" oninput="updatePreview('option-${index}', 'option-preview-${index}')"></textarea>
                     <div class="preview">Preview: <span id="option-preview-${index}"></span></div>
+
+                    <!-- Option image -->
                     <input type="file" class="form-input" accept="image/*" onchange="handleImageUpload('option-${index}-image')" style="margin-top: 0.5rem;">
-                    
+                    <img id="option-${index}-imagePreview" style="display:none; max-width:100px; margin-top:0.5rem;" />
+                    <button id="option-${index}-imageDeleteBtn" class="btn btn-small btn-danger" style="display:none;" onclick="deleteImage(event,'option-${index}-image', editingQuestionId)">Delete Image</button>
+
+
                     <!-- Notes section for correct answers -->
                     <div class="option-note hidden" id="note-container-${index}" style="margin-top: 0.5rem; padding-left: 1.5rem; border-left: 2px solid #d1d5db;">
                         <label class="text-sm" style="color: #374151;">Answer Note:</label>
                         <textarea id="note-${index}" class="form-textarea" placeholder="Explanation or notes..."></textarea>
-                        <input type="file" class="form-input" accept="image/*" onchange="handleImageUpload('note-${index}-image')" style="margin-top: 0.5rem;">
+                        
+                        <!-- Note image -->
+                        <input type="file" class="form-input" accept="image/*" onchange="handleImageUpload('note-${index}-note-image')" style="margin-top: 0.5rem;">
+                        <img id="note-${index}-note-imagePreview" style="display:none; max-width:100px; margin-top:0.5rem;" />
+                        <button id="option-${index}-imageDeleteBtn" class="btn btn-small btn-danger" style="display:none;" onclick="deleteImage(event,'option-${index}-image', editingQuestionId)">Delete Image</button>
+
                     </div>
                 `;
                 container.appendChild(optionDiv);
             });
         }
+
+        function deleteImage(e, inputId, questionId ) {
+            e.preventDefault();
+            // Remove from currentImages
+            if (currentImages[inputId]) delete currentImages[inputId];
+
+            // If editing an existing question, also remove from the dataStore
+            if (questionId) {
+                const question = dataStore.questions.find(q => q._id === questionId);
+                if (question) {
+                    // Handle question image
+                    if (inputId === 'questionImage') delete question.questionImage;
+
+                    // Handle option images
+                    const optionMatch = inputId.match(/^option-(\d+)-image$/);
+                    if (optionMatch && question.options?.[optionMatch[1]]) {
+                        delete question.options[optionMatch[1]].image;
+                    }
+
+                    // Handle note images
+                    const noteMatch = inputId.match(/^note-(\d+)-image$/);
+                    if (noteMatch && question.options?.[noteMatch[1]]) {
+                        delete question.options[noteMatch[1]].noteImage;
+                    }
+
+                    // Handle short-answer note image
+                    if (inputId === 'correctAnswerNoteImage') delete question.correctAnswerNoteImage;
+
+                    // Save updates
+                    dataStore.updateQuestion(questionId, question);
+                }
+            }
+
+            // Clear file input
+            const fileInput = document.getElementById(inputId);
+            if (fileInput) fileInput.value = "";
+
+            // Hide preview
+            const preview = document.getElementById(`${inputId}Preview`);
+            if (preview) {
+                preview.src = '';
+                preview.style.display = 'none';
+            }
+
+            // Hide delete button
+            const deleteBtn = document.getElementById(`${inputId}DeleteBtn`);
+            if (deleteBtn) deleteBtn.style.display = 'none';
+        }
+
+
+        // function generateOptionsHTML() {
+        //     const container = document.getElementById('options-container');
+        //     const letters = ['A', 'B', 'C', 'D'];
+            
+        //     container.innerHTML = '';
+            
+        //     letters.forEach((letter, index) => {
+        //         const optionDiv = document.createElement('div');
+        //         optionDiv.className = 'option-item';
+        //         optionDiv.innerHTML = `
+        //             <div class="option-header">
+        //                 <span style="font-weight: 500;">${letter}.</span>
+        //                 <input type="checkbox" id="correct-${index}" onchange="handleCorrectAnswer(${index})">
+        //                 <label for="correct-${index}" class="text-sm" style="color: #6b7280;">Correct Answer</label>
+        //             </div>
+        //             <div class="format-toolbar">
+        //                 <button type="button" class="format-btn" onclick="formatText('option-${index}', 'bold')"><b>B</b></button>
+        //                 <button type="button" class="format-btn" onclick="formatText('option-${index}', 'underline')"><u>U</u></button>
+        //                 <button type="button" class="format-btn" onclick="formatText('option-${index}', 'superscript')">X²</button>
+        //                 <button type="button" class="format-btn" onclick="formatText('option-${index}', 'subscript')">X₂</button>
+        //             </div>
+
+        //             <textarea id="option-${index}" class="form-textarea" oninput="updatePreview('option-${index}', 'option-preview-${index}')"></textarea>
+        //             <div class="preview">Preview: <span id="option-preview-${index}"></span></div>
+        //             <input type="file" class="form-input" accept="image/*" onchange="handleImageUpload('option-${index}-image')" style="margin-top: 0.5rem;">
+                    
+        //             <!-- Notes section for correct answers -->
+        //             <div class="option-note hidden" id="note-container-${index}" style="margin-top: 0.5rem; padding-left: 1.5rem; border-left: 2px solid #d1d5db;">
+        //                 <label class="text-sm" style="color: #374151;">Answer Note:</label>
+        //                 <textarea id="note-${index}" class="form-textarea" placeholder="Explanation or notes..."></textarea>
+        //                 <input type="file" class="form-input" accept="image/*" onchange="handleImageUpload('note-${index}-image')" style="margin-top: 0.5rem;">
+        //             </div>
+        //         `;
+        //         container.appendChild(optionDiv);
+        //     });
+        // }
 
         function handleCorrectAnswer(index) {
             // Uncheck all other options and hide their notes
@@ -959,27 +1056,53 @@
         }
 
         // Image handling
+        // function handleImageUpload(inputId) {
+        //     const input = document.getElementById(inputId) || event.target;
+        //     const file = input.files[0];
+            
+        //     if (file) {
+        //         const reader = new FileReader();
+        //         reader.onload = function(e) {
+        //             currentImages[inputId] = e.target.result;
+        //             const previewImg = document.getElementById("questionImagePreview");
+        //             previewImg.src = e.target.result;
+        //             previewImg.style.display = "block";
+        //                     // Show delete button
+        //            // if (fieldId === "questionImage") {
+        //             //    document.querySelector("button[onclick='deleteQuestionImage()']").style.display = "inline-block";
+        //           //  }
+        //           document.getElementById("deleteQuestionImageBtn").style.display = "inline-block";
+
+        //         };
+        //         reader.readAsDataURL(file);
+        //     }
+        // }
         function handleImageUpload(inputId) {
             const input = document.getElementById(inputId) || event.target;
             const file = input.files[0];
-            
+
             if (file) {
                 const reader = new FileReader();
                 reader.onload = function(e) {
-                    currentImages[inputId] = e.target.result;
-                    const previewImg = document.getElementById("questionImagePreview");
-                    previewImg.src = e.target.result;
-                    previewImg.style.display = "block";
-                            // Show delete button
-                   // if (fieldId === "questionImage") {
-                    //    document.querySelector("button[onclick='deleteQuestionImage()']").style.display = "inline-block";
-                  //  }
-                  document.getElementById("deleteQuestionImageBtn").style.display = "inline-block";
+                    const imageData = e.target.result;
+                    currentImages[inputId] = imageData;
 
+                    // Show preview image
+                    const previewImg = document.getElementById(`${inputId}Preview`);
+                    if (previewImg) {
+                        previewImg.src = imageData;
+                        previewImg.style.display = 'block';
+                    }
+
+                    // Show delete button
+                    const deleteBtn = document.getElementById(`${inputId}DeleteBtn`);
+                    if (deleteBtn) deleteBtn.style.display = 'inline-block';
                 };
                 reader.readAsDataURL(file);
             }
         }
+
+
 
         // Question CRUD operations
         // function handleQuestionSubmit(e) {
@@ -1175,6 +1298,15 @@
                     // Auto-check correct answer box
                     document.getElementById(`correct-${index}`).checked = option.isCorrect;
 
+                        // Option image preview + delete
+                    if (option.image) {
+                        currentImages[`option-${index}-image`] = option.image;
+                        const optionImg = document.getElementById(`option-${index}-imagePreview`);
+                        optionImg.src = option.image;
+                        optionImg.style.display = "block";
+                        document.getElementById(`option-${index}-imageDeleteBtn`).style.display = "inline-block";
+                    }
+
                     if (option.image) {
                         currentImages[`option-${index}-image`] = option.image;
                     }
@@ -1187,6 +1319,15 @@
                         if (option.noteImage) {
                             currentImages[`note-${index}-note-image`] = option.noteImage;
                         }
+
+                        if (option.noteImage) {
+                            currentImages[`note-${index}-note-image`] = option.noteImage;
+                            const noteImg = document.getElementById(`note-${index}-note-imagePreview`);
+                            noteImg.src = option.noteImage;
+                            noteImg.style.display = "block";
+                            document.getElementById(`note-${index}-note-imageDeleteBtn`).style.display = "inline-block";
+                        }
+
                     }
                 });
             } else {
@@ -1199,6 +1340,13 @@
                 }
                 if (question.correctAnswerNoteImage) {
                     currentImages['correctAnswerNoteImage'] = question.correctAnswerNoteImage;
+                    const noteImg = document.getElementById(`correctAnswerNoteImagePreview`);
+                    if (noteImg) {
+                        noteImg.src = question.correctAnswerNoteImage;
+                        noteImg.style.display = "block";
+                    }
+                    const deleteBtn = document.getElementById('correctAnswerNoteImageDeleteBtn');
+                    if (deleteBtn) deleteBtn.style.display = 'inline-block';
                 }
             }
 
