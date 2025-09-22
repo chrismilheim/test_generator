@@ -446,7 +446,15 @@
                         <div class="form-group">
                             <label class="form-label">Question Image (optional)</label>
                             <input type="file" id="questionImage" class="form-input" accept="image/*" onchange="handleImageUpload('questionImage')">
-                        </div>
+                        
+                            <!-- Preview -->
+                            <div id="questionImagePreviewContainer" style="margin-top: 5px;">
+                                <img id="questionImagePreview" src="" alt="Question Image Preview" style="max-width: 120px; display: none; border: 1px solid #ccc; padding: 2px;">
+                                <button id="deleteQuestionImageBtn" class="btn btn-small btn-danger" onclick="deleteQuestionImage()" style="display:none; margin-left: 10px;">
+                                    Delete Image
+                                </button>
+                            </div>
+                        </div>                        
 
                         <div id="multiple-choice-section">
                             <label class="form-label">Answer Options</label>
@@ -959,6 +967,15 @@
                 const reader = new FileReader();
                 reader.onload = function(e) {
                     currentImages[inputId] = e.target.result;
+                    const previewImg = document.getElementById("questionImagePreview");
+                    previewImg.src = e.target.result;
+                    previewImg.style.display = "block";
+                            // Show delete button
+                   // if (fieldId === "questionImage") {
+                    //    document.querySelector("button[onclick='deleteQuestionImage()']").style.display = "inline-block";
+                  //  }
+                  document.getElementById("deleteQuestionImageBtn").style.display = "inline-block";
+
                 };
                 reader.readAsDataURL(file);
             }
@@ -1070,6 +1087,7 @@
                 showLoading(false);
             }, 500);
         }
+        
 
 
         function resetQuestionForm() {
@@ -1080,6 +1098,12 @@
             document.querySelectorAll('.preview span').forEach(span => span.innerHTML = '');
             document.getElementById('customSubjectPool').classList.add('hidden');
         }
+
+        // function deleteQuestionImage(){
+        //     if( question.questionImage){
+        //         question.questionImage = '';
+        //     }
+        // }
 
         function editQuestion(id) {
             const question = dataStore.questions.find(q => q._id === id);
@@ -1120,6 +1144,26 @@
                     customInput.classList.remove('hidden');
                     customInput.value = question.subjectPool.replace(/-/g, ' ');
                 }
+            }
+
+            // if (question.questionImage) {
+            //     currentImages['questionImage'] = question.questionImage;
+            //     document.querySelector("button[onclick='deleteQuestionImage()']").style.display = "inline-block";
+            // } else {
+            //     document.querySelector("button[onclick='deleteQuestionImage()']").style.display = "none";
+            // }
+            if (question.questionImage) {
+                currentImages['questionImage'] = question.questionImage;
+
+                const previewImg = document.getElementById("questionImagePreview");
+                previewImg.src = question.questionImage;
+                previewImg.style.display = "block";
+
+                document.getElementById("deleteQuestionImageBtn").style.display = "inline-block";
+               
+            } else {
+                document.getElementById("questionImagePreview").style.display = "none";
+                document.getElementById("deleteQuestionImageBtn").style.display = "none";
             }
 
             toggleQuestionType();
@@ -1163,6 +1207,33 @@
             for (let i = 0; i < 4; i++) {
                 updatePreview(`option-${i}`, `option-preview-${i}`);
             }
+        }
+
+        function deleteQuestionImage() {
+            if (!editingQuestionId) return;
+
+            // Find question in store
+            const question = dataStore.questions.find(q => q._id === editingQuestionId);
+            if (!question) return;
+
+            // Remove from question and global currentImages
+            delete question.questionImage;
+            delete currentImages['questionImage'];
+
+            // Clear file input
+            const fileInput = document.getElementById('questionImage');
+            if (fileInput) fileInput.value = "";
+
+            // Save update
+            dataStore.updateQuestion(editingQuestionId, { questionImage: null });
+
+            // Hide the delete button if no image
+            const deleteBtn = document.querySelector("button[onclick='deleteQuestionImage()']");
+            if (deleteBtn) {
+                deleteBtn.style.display = "none";
+            }
+            document.getElementById("questionImagePreview").style.display = "none";
+            alert("Question image deleted.");
         }
 
         function cancelEdit() {
