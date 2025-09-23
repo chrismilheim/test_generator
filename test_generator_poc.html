@@ -10,6 +10,7 @@
     <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/docx@7.3.0/build/index.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/file-saver/2.0.5/FileSaver.min.js"></script>
+    <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/docx/7.8.2/docx.min.js"></script> -->
     <style>
         * {
             margin: 0;
@@ -442,6 +443,8 @@
                             <div class="format-toolbar">
                                 <button type="button" class="format-btn" onclick="formatText('questionText', 'bold')"><b>B</b></button>
                                 <button type="button" class="format-btn" onclick="formatText('questionText', 'underline')"><u>U</u></button>
+                                <button type="button" class="format-btn" onclick="formatText('questionText', 'superscript')">X²</button>
+                                <button type="button" class="format-btn" onclick="formatText('questionText', 'subscript')">X₂</button>
                             </div>
                             <textarea id="questionText" class="form-textarea" oninput="updatePreview('questionText', 'questionPreview')" required></textarea>
                             <div class="preview">Preview: <span id="questionPreview"></span></div>
@@ -651,6 +654,8 @@
             <div>Processing...</div>
         </div>
     </div>
+
+    <div id="exam-html" style="display:none;"></div>
 
     <script>
         // // Data storage using localStorage
@@ -1240,15 +1245,15 @@
         //         showLoading(false);
         //     }, 500);
         // }
-        function handleQuestionSubmit(e) {
+        async function handleQuestionSubmit(e) {
             e.preventDefault();
             showLoading(true);
 
-            setTimeout(() => {
+            setTimeout(async() => {
                 let subjectPool = document.getElementById('subjectPool').value;
                 if (subjectPool === 'custom') {
                     subjectPool = document.getElementById('customSubjectPool').value
-                        .toLowerCase()
+                        // .toLowerCase()
                         .replace(/\s+/g, '-');
                 }
 
@@ -1281,13 +1286,13 @@
                 }
 
                 if (editingQuestionId) {
-                    dataStore.updateQuestion(editingQuestionId, formData);
+                   await dataStore.updateQuestion(editingQuestionId, formData);
                     editingQuestionId = null;
                     document.getElementById('question-form-title').textContent = 'Add New Question';
                     document.getElementById('cancel-edit-btn').classList.add('hidden');
                     document.getElementById('submit-btn-text').textContent = 'Create Question';
                 } else {
-                    dataStore.addQuestion(formData);
+                    await dataStore.addQuestion(formData);
                 }
 
                 resetQuestionForm();
@@ -2208,6 +2213,70 @@
         //     return segments;
         // }
 
+        // Function to parse HTML formatting and create TextRuns
+        function parseFormattedTextDocx(htmlText) {
+            const textRuns = [];
+            let currentIndex = 0;
+            
+            // Simple regex to find formatting tags
+            const formatRegex = /<(b|u|sup|sub)>(.*?)<\/\1>/g;
+            let match;
+            
+            while ((match = formatRegex.exec(htmlText)) !== null) {
+                // Add text before the tag
+                if (match.index > currentIndex) {
+                    const beforeText = htmlText.substring(currentIndex, match.index);
+                    if (beforeText) {
+                        textRuns.push(new TextRun({ text: beforeText }));
+                    }
+                }
+                
+                // Add the formatted text
+                const tag = match[1];
+                const content = match[2];
+                if (content) {
+                    const runProps = { text: content };
+                    
+                    switch (tag) {
+                        case 'b':
+                            runProps.bold = true;
+                            break;
+                        case 'u':
+                            runProps.underline = {};
+                            break;
+                        case 'sup':
+                            runProps.superScript = true;
+                            break;
+                        case 'sub':
+                            runProps.subScript = true;
+                            break;
+                    }
+                    
+                    textRuns.push(new TextRun(runProps));
+                }
+                
+                currentIndex = formatRegex.lastIndex;
+            }
+            
+            // Add remaining text
+            if (currentIndex < htmlText.length) {
+                const remainingText = htmlText.substring(currentIndex);
+                if (remainingText) {
+                    textRuns.push(new TextRun({ text: remainingText }));
+                }
+            }
+            
+            // If no formatting found, return the whole text
+            if (textRuns.length === 0) {
+                textRuns.push(new TextRun({ text: htmlText }));
+            }
+            
+            return textRuns;
+        }
+
+
+
+
         function parseFormattedText(text) {
             const segments = [];
             const tagRegex = /<(b|u|sup|sub)>(.*?)<\/\1>/gi;
@@ -2265,121 +2334,331 @@
         }
 
         async function generateDocx(test) {
-    const { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, ImageRun } = docx;
-
-    // Helper: convert base64 data URL to Uint8Array
-    function base64ToUint8Array(base64) {
-        const base64Data = base64.includes(',') ? base64.split(',')[1] : base64;
-        const binary = atob(base64Data);
-        const len = binary.length;
-        const bytes = new Uint8Array(len);
-        for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
-        return bytes;
-    }
-
-    const doc = new Document({
-        sections: [{
-            properties: {},
-            children: [
-                // Title
+            const { Document, Packer, Paragraph, TextRun, HeadingLevel, ImageRun, Media, Table, 
+                TableRow, 
+                TableCell, 
+                WidthType, AlignmentType  } = docx;
+            
+            // Function to parse HTML formatting and create TextRuns
+            function parseFormattedText(htmlText) {
+                const textRuns = [];
+                let currentIndex = 0;
+                
+                const formatRegex = /<(b|u|sup|sub)>(.*?)<\/\1>/g;
+                let match;
+                
+                while ((match = formatRegex.exec(htmlText)) !== null) {
+                    // Add text before the tag
+                    if (match.index > currentIndex) {
+                        const beforeText = htmlText.substring(currentIndex, match.index);
+                        if (beforeText) {
+                            textRuns.push(new TextRun({ text: beforeText }));
+                        }
+                    }
+                    
+                    // Add the formatted text
+                    const tag = match[1];
+                    const content = match[2];
+                    if (content) {
+                        const runProps = { text: content };
+                        
+                        switch (tag) {
+                            case 'b':
+                                runProps.bold = true;
+                                break;
+                            case 'u':
+                                runProps.underline = {};
+                                break;
+                            case 'sup':
+                                runProps.superScript = true;
+                                break;
+                            case 'sub':
+                                runProps.subScript = true;
+                                break;
+                        }
+                        
+                        textRuns.push(new TextRun(runProps));
+                    }
+                    
+                    currentIndex = formatRegex.lastIndex;
+                }
+                
+                // Add remaining text
+                if (currentIndex < htmlText.length) {
+                    const remainingText = htmlText.substring(currentIndex);
+                    if (remainingText) {
+                        textRuns.push(new TextRun({ text: remainingText }));
+                    }
+                }
+                
+                // If no formatting found, return the whole text
+                if (textRuns.length === 0) {
+                    textRuns.push(new TextRun({ text: htmlText }));
+                }
+                
+                return textRuns;
+            }
+            
+            const children = [
                 new Paragraph({
                     text: test.title,
                     heading: HeadingLevel.TITLE,
-                    alignment: AlignmentType.CENTER
+                    alignment: AlignmentType.CENTER,
                 }),
-                // Version
                 new Paragraph({
                     text: `Version ${test.testNumber}`,
                     alignment: AlignmentType.CENTER,
-                    spacing: { after: 400 }
                 }),
-                // Header
-                ...(test.header ? [new Paragraph({
-                    text: test.header,
-                    alignment: AlignmentType.CENTER,
-                    spacing: { after: 200 }
-                })] : []),
-                // Instructions
-                ...(test.instructions ? [new Paragraph({
-                    text: test.instructions,
-                    spacing: { after: 400 }
-                })] : []),
-                // Questions
-                ...test.questions.flatMap((question, qIndex) => {
-                    const children = [
-                        new Paragraph({
-                            children: [
-                                new TextRun({ text: `${qIndex + 1}. `, bold: true }),
-                                new TextRun({ text: question.questionText.replace(/<[^>]*>/g, '') })
-                            ],
-                            spacing: { before: 200, after: 100 }
-                        })
-                    ];
+                new Paragraph({ text: "" }), // spacing
 
-                    // Multiple-choice options
-                    if (question.type === 'multiple-choice') {
-                        question.options.forEach(option => {
-                            const letter = String.fromCharCode(65 + option.optionIndex);
-                            const optionChildren = [
-                                new TextRun({ text: `${letter}. ${option.text} ` })
-                            ];
-
-                            // Add images inline
-                            if (option.images && option.images.length) {
-                                option.images.forEach(imgBase64 => {
-                                    try {
-                                        const imageRun = new ImageRun({
-                                            data: base64ToUint8Array(imgBase64),
-                                            transformation: { width: 100, height: 100 }
-                                        });
-                                        optionChildren.push(imageRun);
-                                    } catch (e) {
-                                        console.warn("Failed to add image:", e);
-                                    }
-                                });
-                            }
-
-                            children.push(new Paragraph({
-                                children: optionChildren,
-                                indent: { left: 400 },
-                                spacing: { after: 50 }
-                            }));
-                        });
-                    } else {
-                        // Short answer: blank lines
-                        for (let i = 0; i < 3; i++) {
-                            children.push(new Paragraph({
-                                text: "_".repeat(50),
-                                indent: { left: 400 },
-                                spacing: { after: 100 }
-                            }));
-                        }
-
-                        // Add question images (if any)
-                        if (question.images && question.images.length) {
-                            const imageParagraphs = question.images.map(imgBase64 => new Paragraph({
+                // Header info (Name, Date, Section from test.header)
+                ...(test.header ? [
+                    new Paragraph({
+                        text: test.header,
+                        alignment: AlignmentType.LEFT,
+                    }),
+                    new Paragraph({ text: "" }) // spacing
+                ] : []),
+                
+                // Instructions if they exist
+                ...(test.instructions ? [
+                    new Paragraph({
+                        text: test.instructions,
+                        alignment: AlignmentType.LEFT,
+                    }),
+                    new Paragraph({ text: "" }) // spacing
+                ] : [])
+            ];
+            
+            // Helper function to convert base64 to buffer
+            function base64ToArrayBuffer(base64) {
+                const binaryString = atob(base64.split(',')[1]); // Remove data:image/png;base64, part
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+                return bytes;
+            }
+            
+            for (let index = 0; index < test.questions.length; index++) {
+                const question = test.questions[index];
+                
+                // Question text with formatting
+                children.push(
+                    new Paragraph({
+                        children: [
+                            new TextRun({ text: `${index + 1}. `, bold: true }),
+                            ...parseFormattedText(question.questionText)
+                        ]
+                    })
+                );
+                
+                // Question image if exists
+                if (question.questionImage) {
+                    try {
+                        const imageBuffer = base64ToArrayBuffer(question.questionImage);
+                        children.push(
+                            new Paragraph({
                                 children: [
                                     new ImageRun({
-                                        data: base64ToUint8Array(imgBase64),
-                                        transformation: { width: 150, height: 100 }
-                                    })
+                                        data: imageBuffer,
+                                        transformation: {
+                                            width: 300,
+                                            height: 200,
+                                        },
+                                    }),
                                 ],
-                                spacing: { after: 100 }
+                            })
+                        );
+                    } catch (error) {
+                        console.warn('Could not add question image:', error);
+                    }
+                }
+                
+                // For multiple choice with images, use a table layout
+                if (question.type === 'multiple-choice') {
+                    const optionsWithImages = question.options.filter(opt => opt.image);
+                    
+                    if (optionsWithImages.length > 0) {
+                        // Create table with 2 columns for side-by-side layout
+                        const tableRows = [];
+                        
+                        for (let i = 0; i < question.options.length; i += 2) {
+                            const leftOption = question.options[i];
+                            const rightOption = question.options[i + 1];
+                            
+                            const leftLetter = String.fromCharCode(65 + i);
+                            const rightLetter = rightOption ? String.fromCharCode(65 + i + 1) : '';
+                            
+                            const leftCellChildren = [
+                                new Paragraph({ 
+                                    children: [
+                                        new TextRun({ text: `${leftLetter}. ` }),
+                                        ...parseFormattedText(leftOption.text)
+                                    ]
+                                })
+                            ];
+                            
+                            if (leftOption.image) {
+                                try {
+                                    const imageBuffer = base64ToArrayBuffer(leftOption.image);
+                                    leftCellChildren.push(
+                                        new Paragraph({
+                                            children: [
+                                                new ImageRun({
+                                                    data: imageBuffer,
+                                                    transformation: {
+                                                        width: 180,
+                                                        height: 120,
+                                                    },
+                                                }),
+                                            ],
+                                        })
+                                    );
+                                } catch (error) {
+                                    console.warn('Could not add option image:', error);
+                                }
+                            }
+                            
+                            const rightCellChildren = [];
+                            if (rightOption) {
+                                rightCellChildren.push(
+                                    new Paragraph({ 
+                                        children: [
+                                            new TextRun({ text: `${rightLetter}. ` }),
+                                            ...parseFormattedText(rightOption.text)
+                                        ]
+                                    })
+                                );
+                                
+                                if (rightOption.image) {
+                                    try {
+                                        const imageBuffer = base64ToArrayBuffer(rightOption.image);
+                                        rightCellChildren.push(
+                                            new Paragraph({
+                                                children: [
+                                                    new ImageRun({
+                                                        data: imageBuffer,
+                                                        transformation: {
+                                                            width: 180,
+                                                            height: 120,
+                                                        },
+                                                    }),
+                                                ],
+                                            })
+                                        );
+                                    } catch (error) {
+                                        console.warn('Could not add option image:', error);
+                                    }
+                                }
+                            }
+                            
+                            tableRows.push(
+                                new TableRow({
+                                    children: [
+                                        new TableCell({
+                                            children: leftCellChildren,
+                                            width: { size: 50, type: WidthType.PERCENTAGE },
+                                            borders: {
+                                                top: { style: "none" },
+                                                bottom: { style: "none" },
+                                                left: { style: "none" },
+                                                right: { style: "none" }
+                                            }
+                                        }),
+                                        new TableCell({
+                                            children: rightCellChildren,
+                                            width: { size: 50, type: WidthType.PERCENTAGE },
+                                            borders: {
+                                                top: { style: "none" },
+                                                bottom: { style: "none" },
+                                                left: { style: "none" },
+                                                right: { style: "none" }
+                                            }
+                                        })
+                                    ]
+                                })
+                            );
+                        }
+                        
+                        children.push(
+                            new Table({
+                                rows: tableRows,
+                                width: { size: 100, type: WidthType.PERCENTAGE },
+                                borders: {
+                                    top: { style: "none" },
+                                    bottom: { style: "none" },
+                                    left: { style: "none" },
+                                    right: { style: "none" },
+                                    insideHorizontal: { style: "none" },
+                                    insideVertical: { style: "none" }
+                                }
+                            })
+                        );
+                    } else {
+                        // No images, use regular text layout
+                        question.options.forEach((option, optIndex) => {
+                            const letter = String.fromCharCode(65 + optIndex);
+                            children.push(new Paragraph({
+                                children: [
+                                    new TextRun({ text: `   ${letter}. ` }),
+                                    ...parseFormattedText(option.text)
+                                ]
                             }));
-                            children.push(...imageParagraphs);
+                            children.push(new Paragraph({ text: "" }));
+                        });
+                    }
+                }
+
+                if (question.type === 'short-answer') {
+                    children.push(
+                        new Paragraph({ 
+                            text: "Answer:",
+                            spacing: { before: 200, after: 100 }
+                        })
+                    );
+                    
+                    // Answer lines with generous spacing
+                    for (let i = 0; i < 8; i++) {
+                        children.push(
+                            new Paragraph({
+                                text: "_".repeat(75),
+                                spacing: { 
+                                    before: 200, // More space between lines
+                                    after: 200 
+                                }
+                            })
+                        );
+                    }
+                    
+                    // Extra space after answer section
+                    children.push(new Paragraph({ 
+                        text: "",
+                        spacing: { after: 400 }
+                    }));
+                }
+                
+                children.push(new Paragraph({ text: "" })); // spacing between questions
+                children.push(new Paragraph({ text: "" })); // spacing between questions
+            }
+            
+            const doc = new Document({
+                styles: {
+                    default: {
+                        document: {
+                            run: {
+                                font: "Arial", // or "Arial", "Calibri", etc.
+                              
+                            }
                         }
                     }
-
-                    return children;
-                })
-            ]
-        }]
-    });
-
-    return await Packer.toBlob(doc);
-}
-
-
+                },
+                sections: [{ children }]
+            });
+            
+            const blob = await Packer.toBlob(doc);
+            return blob;
+        }
 
 
 
@@ -2883,7 +3162,7 @@
             return existingBaseIds.length > 0 ? (existingBaseIds[0] + 1).toString() : '1';
         }
         
-        function performDuplication(originalQuestionId) {
+        async function performDuplication(originalQuestionId) {
             const originalQuestion = dataStore.questions.find(q => q._id === originalQuestionId);
             if (!originalQuestion) return;
             
@@ -2933,7 +3212,7 @@
             };
             
             // Add to data store
-            const savedQuestion = dataStore.addQuestion(duplicatedQuestion);
+            const savedQuestion = await dataStore.addQuestion(duplicatedQuestion);
             
             closeDuplicationDialog();
             
