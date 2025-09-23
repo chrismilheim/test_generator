@@ -2478,6 +2478,12 @@
                 // For multiple choice with images, use a table layout
                 if (question.type === 'multiple-choice') {
                     const optionsWithImages = question.options.filter(opt => opt.image);
+
+                    children.push(new Paragraph({ 
+                        text: "",
+                        spacing: { after: 150 } // Adjust this value for more/less space
+                    }));
+                    
                     
                     if (optionsWithImages.length > 0) {
                         // Create table with 2 columns for side-by-side layout
