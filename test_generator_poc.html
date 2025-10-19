@@ -1618,6 +1618,103 @@
         //     }, 1000);
         // }
 
+        function generateTestsRandomized(templateId, numberOfTests) {
+            const template = dataStore.templates.find(t => t._id === templateId);
+            if (!template) return;
+
+            showLoading(true);
+
+            setTimeout(() => {
+                // Group questions by subject pool first, then by base ID
+                const subjectGroups = {};
+                template.questions.forEach(qId => {
+                    const question = dataStore.questions.find(q => q._id === qId);
+                    if (!question) return;
+
+                    const subject = question.subjectPool || 'uncategorized';
+                    if (!subjectGroups[subject]) subjectGroups[subject] = {};
+                    if (!subjectGroups[subject][question.baseId]) subjectGroups[subject][question.baseId] = [];
+
+                    subjectGroups[subject][question.baseId].push(question);
+                });
+
+                // Keep track of rotation per subject/baseID to minimize repetition
+                const rotationIndexes = {};
+                Object.keys(subjectGroups).forEach(subject => {
+                    rotationIndexes[subject] = {};
+                    Object.keys(subjectGroups[subject]).forEach(baseId => {
+                        rotationIndexes[subject][baseId] = 0;
+                    });
+                });
+
+                for (let testIndex = 0; testIndex < numberOfTests; testIndex++) {
+                    const testQuestions = [];
+
+                    // Process subjects alphabetically for consistency
+                    Object.keys(subjectGroups).sort().forEach(subject => {
+                        const baseGroups = subjectGroups[subject];
+
+                        Object.keys(baseGroups).sort((a, b) => (parseInt(a) || 0) - (parseInt(b) || 0))
+                            .forEach(baseId => {
+                                const variants = baseGroups[baseId];
+                                const rotationIndex = rotationIndexes[subject][baseId];
+
+                                // Systematically select variant
+                                const selectedQuestion = variants[rotationIndex % variants.length];
+
+                                // Increment rotation for next test
+                                rotationIndexes[subject][baseId] = rotationIndex + 1;
+
+                                testQuestions.push({
+                                    questionId: selectedQuestion.questionId,
+                                    baseId: selectedQuestion.baseId,
+                                    subjectPool: selectedQuestion.subjectPool,
+                                    questionText: selectedQuestion.questionText,
+                                    questionImage: selectedQuestion.questionImage,
+                                    type: selectedQuestion.type,
+                                    options: selectedQuestion.options,
+                                    correctAnswer: selectedQuestion.correctAnswer,
+                                    correctAnswerNote: selectedQuestion.correctAnswerNote,
+                                    correctAnswerNoteImage: selectedQuestion.correctAnswerNoteImage
+                                });
+                            });
+                    });
+
+                    // Separate multiple choice from other question types
+                    const multipleChoiceQuestions = testQuestions.filter(q => q.type === 'multiple-choice');
+                    const otherQuestions = testQuestions.filter(q => q.type !== 'multiple-choice');
+
+                    // Randomize only the multiple choice questions
+                    for (let i = multipleChoiceQuestions.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [multipleChoiceQuestions[i], multipleChoiceQuestions[j]] = 
+                            [multipleChoiceQuestions[j], multipleChoiceQuestions[i]];
+                    }
+
+                    // Combine: randomized MC questions + other questions in original order
+                    const finalQuestions = [...multipleChoiceQuestions, ...otherQuestions];
+
+                    const generatedTest = {
+                        templateId: templateId,
+                        testNumber: testIndex + 1,
+                        title: template.title,
+                        header: template.header,
+                        instructions: template.instructions,
+                        questions: finalQuestions
+                    };
+
+                    dataStore.addGeneratedTest(generatedTest);
+                }
+
+                renderGeneratedTestsList();
+                updateGeneratedTestsStats();
+                showLoading(false);
+
+                // Show detailed generation summary
+                showTestGenerationSummary(subjectGroups, numberOfTests);
+            }, 1000);
+        }
+
         function generateTests(templateId, numberOfTests) {
             const template = dataStore.templates.find(t => t._id === templateId);
             if (!template) return;
@@ -3290,6 +3387,11 @@
                                 onclick="generateTests('${template._id}', parseInt(document.getElementById('tests-${template._id}').value) || 1)">
                             Generate Tests
                         </button>
+                         <button class="btn btn-small btn-secondary" 
+                                onclick="generateTestsRandomized('${template._id}', parseInt(document.getElementById('tests-${template._id}').value) || 1)">
+                            Generate Randomized Tests
+                        </button>
+                        
                         <button class="btn btn-small btn-danger" 
                                 onclick="deleteTemplate('${template._id}')">
                             Delete
