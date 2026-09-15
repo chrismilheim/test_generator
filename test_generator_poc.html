@@ -942,6 +942,12 @@ kbd{
         </div>
 
         <div class="pref-block">
+          <h4>Multiple choice answer blank</h4>
+          <label class="check"><input type="checkbox" id="pref-mcAnswerBlank" onchange="prefFromForm()"> Print a blank (______) before each multiple-choice question for the answer letter</label>
+          <div class="hint" style="margin-top:.4rem;">Only affects multiple-choice questions. Short-answer questions are unchanged.</div>
+        </div>
+
+        <div class="pref-block">
           <h4>Images</h4>
           <div class="hint" style="margin-bottom:.5rem;">Aspect ratio is always preserved. Choice images are normalised to one height so a row of four looks even.</div>
           <div class="row r2">
@@ -1145,6 +1151,7 @@ const FACTORY_PREFS = {
   answerMode: 'blank',          // blank | lines | box | grid
   answerLines: 6,
   answerLabel: 'Answer:',
+  mcAnswerBlank: false,         // print a blank before each MC question for the answer letter
   choiceImgH: 110,              // px at 96dpi
   qImgW: 380,
   imgUniform: true,
@@ -2494,10 +2501,12 @@ function paperHtml(q, num, withKey) {
   const bq = fmtOf(q, 'boldQuestion'), bl = fmtOf(q, 'boldLetter'), bc = fmtOf(q, 'boldChoice');
   const numTxt = prefs.numFmt === 'n)' ? num + ')' : prefs.numFmt === 'Qn.' ? 'Q' + num + '.' : num + '.';
   const mkTxt = prefs.showMarks ? marksLabel(marksOf(q)) : '';
+  const mcBlank = (prefs.mcAnswerBlank && q.type === 'multiple-choice')
+    ? `<span style="font-weight:normal;letter-spacing:1px;">______&nbsp;&nbsp;</span>` : '';
   let h = `<div style="margin-bottom:14px;">
     <div style="${bq ? 'font-weight:bold;' : ''}">
       ${mkTxt ? `<span style="float:right;font-weight:normal;color:#333;">${esc(mkTxt)}</span>` : ''}
-      <span style="font-weight:bold;">${numTxt} </span>${renderRich(q.questionText)}</div>`;
+      ${mcBlank}<span style="font-weight:bold;">${numTxt} </span>${renderRich(q.questionText)}</div>`;
   (q.questionImages || []).forEach(im => h += `<div style="margin:6px 0;${prefs.imgCenter ? 'text-align:center;' : ''}"><img src="${im.src}" style="max-width:${prefs.qImgW}px;max-height:300px;"></div>`);
 
   if (q.type === 'multiple-choice') {
@@ -2778,6 +2787,7 @@ function prefToForm() {
   set('pref-showMarks', prefs.showMarks); set('pref-marksTotal', prefs.marksTotal);
   set('pref-defaultMarks', prefs.defaultMarks); set('pref-marksStyle', prefs.marksStyle);
   set('pref-answerLines', prefs.answerLines); set('pref-answerLabel', prefs.answerLabel);
+  set('pref-mcAnswerBlank', prefs.mcAnswerBlank);
   set('pref-choiceImgH', prefs.choiceImgH); set('pref-qImgW', prefs.qImgW);
   set('pref-imgUniform', prefs.imgUniform); set('pref-imgCenter', prefs.imgCenter);
   set('pref-pageSize', prefs.pageSize); set('pref-font', prefs.font); set('pref-fontSize', prefs.fontSize); set('pref-margin', prefs.margin);
@@ -2795,6 +2805,7 @@ async function prefFromForm() {
     showMarks: g('pref-showMarks'), marksTotal: g('pref-marksTotal'),
     defaultMarks: g('pref-defaultMarks', 1), marksStyle: g('pref-marksStyle'),
     answerLines: g('pref-answerLines', 1), answerLabel: g('pref-answerLabel'),
+    mcAnswerBlank: g('pref-mcAnswerBlank'),
     choiceImgH: g('pref-choiceImgH', 1), qImgW: g('pref-qImgW', 1),
     imgUniform: g('pref-imgUniform'), imgCenter: g('pref-imgCenter'),
     pageSize: g('pref-pageSize'), font: g('pref-font'), fontSize: g('pref-fontSize', 1), margin: g('pref-margin', 1),
@@ -2975,10 +2986,12 @@ async function questionBlocks(q, number, isKey) {
 
   const { Tab, TabStopType } = D();
   const mkTxt = prefs.showMarks ? marksLabel(marksOf(q)) : '';
+  const mcBlank = prefs.mcAnswerBlank && q.type === 'multiple-choice';
   out.push(new Paragraph({
     keepNext: keep, spacing: { before: 120, after: 80 },
     tabStops: mkTxt ? [{ type: TabStopType.RIGHT, position: usableTwips() }] : undefined,
     children: [
+      ...(mcBlank ? [new TextRun({ text: '\u00A0\u00A0\u00A0\u00A0\u00A0', underline: {} }), new TextRun({ text: '\u00A0\u00A0' })] : []),
       new TextRun({ text: numTxt, bold: true }),
       ...richRuns(q.questionText, boldQ ? { bold: true } : {}),
       ...(mkTxt ? [new TextRun({ children: [new Tab(), mkTxt] })] : [])
@@ -3198,7 +3211,8 @@ async function downloadPdf(id) {
       const numTxt = prefs.numFmt === 'n)' ? `${i + 1}) ` : prefs.numFmt === 'Qn.' ? `Q${i + 1}. ` : `${i + 1}. `;
       doc.setFont('helvetica', fmtOf(q, 'boldQuestion') ? 'bold' : 'normal');
       const mkTxt = prefs.showMarks ? marksLabel(marksOf(q)) : '';
-      const lines = doc.splitTextToSize(numTxt + stripRich(q.questionText), CW - (mkTxt ? 46 : 0));
+      const mcBlank = (prefs.mcAnswerBlank && q.type === 'multiple-choice') ? '______  ' : '';
+      const lines = doc.splitTextToSize(mcBlank + numTxt + stripRich(q.questionText), CW - (mkTxt ? 46 : 0));
       need(lines.length * 14 + 20);
       lines.forEach((l, li) => {
         doc.text(l, M, y);
