@@ -1049,6 +1049,8 @@ kbd{
           </div>
           <label class="check" style="margin-top:.6rem;"><input type="checkbox" id="pref-autoVariant" onchange="prefFromForm()"> Suggest the next variant letter automatically</label>
           <label class="check" style="margin-top:.4rem;"><input type="checkbox" id="pref-shuffle" onchange="prefFromForm()"> Shuffle choice order between versions</label>
+          <label class="check" style="margin-top:.4rem;"><input type="checkbox" id="pref-shuffleQuestions" onchange="prefFromForm()"> Shuffle question order between versions</label>
+          <div class="hint" style="margin-top:.3rem;">Use this when questions have no a/b/c variants — each version keeps the same questions but in a different order. Order is shuffled within each subject pool.</div>
         </div>
 
         <div class="pref-block">
@@ -1182,6 +1184,7 @@ const FACTORY_PREFS = {
   customPools: [],
   autoVariant: true,
   shuffle: false,
+  shuffleQuestions: false,
   molScale: 3,
   molBond: 40,
   molTransparent: false
@@ -2643,6 +2646,22 @@ function shuffled(arr) {
   return a;
 }
 
+/* Order the questions of one version. Pools always stay grouped and in a
+   stable pool order; within each pool the questions are either sorted by
+   base ID (the normal layout) or shuffled (when the question-order option is
+   on, so versions differ even without a/b/c variants). */
+function orderQuestions(list, shuffle) {
+  const pools = [...new Set(list.map(q => q.subjectPool))].sort((a, b) => String(a).localeCompare(String(b)));
+  const out = [];
+  pools.forEach(sp => {
+    let group = list.filter(q => q.subjectPool === sp);
+    group = shuffle ? shuffled(group)
+      : group.sort((a, b) => (parseInt(a.baseId) || 0) - (parseInt(b.baseId) || 0));
+    out.push(...group);
+  });
+  return out;
+}
+
 async function generateExams(templateId, nOverride) {
   const t = dataStore.templates.find(x => x._id === templateId);
   if (!t) { toast('Pick a template first.', 'warn'); return; }
@@ -2661,6 +2680,7 @@ async function generateExams(templateId, nOverride) {
   });
 
   const rot = {};
+  const usedOrders = new Set();   // signatures of orders already produced this batch
   const batchId = newId();
   const batchAt = new Date().toISOString();
   const made = [];
@@ -2678,13 +2698,25 @@ async function generateExams(templateId, nOverride) {
         qs.push(chosen);
       });
     });
-    qs.sort((a, b) => String(a.subjectPool).localeCompare(String(b.subjectPool)) ||
-      (parseInt(a.baseId) || 0) - (parseInt(b.baseId) || 0));
+    let ordered;
+    if (prefs.shuffleQuestions) {
+      /* shuffle order per version; try a few times to avoid repeating an
+         order already used in this batch, then accept whatever we get */
+      let tries = 0, sig;
+      do {
+        ordered = orderQuestions(qs, true);
+        sig = ordered.map(q => q._id).join('|');
+        tries++;
+      } while (usedOrders.has(sig) && tries < 16);
+      usedOrders.add(sig);
+    } else {
+      ordered = orderQuestions(qs, false);
+    }
 
     made.push(await dataStore.addGeneratedTest({
       templateId, templateTitle: t.title, testNumber: i + 1,
       title: t.title, header: t.header, instructions: t.instructions,
-      questions: qs, batchId, batchAt, batchSize: n
+      questions: ordered, batchId, batchAt, batchSize: n
     }));
   }
   await dataStore.save();
@@ -2705,8 +2737,8 @@ async function generateExams(templateId, nOverride) {
   renderExams();
   openModal({
     title: `${n} version${n > 1 ? 's' : ''} generated`,
-    body: `<p style="margin-top:0;">Built from <strong>${esc(t.title)}</strong> — ${bases.size} questions per version, rotating through the variants you wrote.</p>
-      ${thin.length ? `<div class="pref-block"><h4>Repeats across versions</h4><div class="hint">These base IDs have fewer variants than versions, so some versions share the same question:</div>
+    body: `<p style="margin-top:0;">Built from <strong>${esc(t.title)}</strong> — ${bases.size} questions per version, rotating through the variants you wrote${prefs.shuffleQuestions ? ', with the question order shuffled on each version' : ''}.</p>
+      ${thin.length ? `<div class="pref-block"><h4>Repeats across versions</h4><div class="hint">These base IDs have fewer variants than versions, so some versions reuse the same question${prefs.shuffleQuestions ? ' — though the question order still differs between versions' : ''}:</div>
         <div class="chip-row" style="margin-top:.5rem;">${thin.map(x => `<span class="chip amber">${esc(x)}</span>`).join('')}</div></div>`
       : `<div class="pref-block"><h4>Every version is unique</h4><div class="hint">Each base ID had enough variants to avoid any repeats.</div></div>`}`,
     foot: `<button class="btn" onclick="closeModal()">Got it</button>`
@@ -2858,7 +2890,7 @@ function prefToForm() {
   set('pref-gapAfter', prefs.gapAfter); set('pref-numFmt', prefs.numFmt);
   set('pref-keepTogether', prefs.keepTogether); set('pref-pageNums', prefs.pageNums);
   set('pref-examWindow', prefs.examWindow); set('pref-examSort', prefs.examSort); set('pref-highlightNew', prefs.highlightNew);
-  set('pref-optCount', prefs.optCount); set('pref-pool', prefs.pool); set('pref-autoVariant', prefs.autoVariant); set('pref-shuffle', prefs.shuffle);
+  set('pref-optCount', prefs.optCount); set('pref-pool', prefs.pool); set('pref-autoVariant', prefs.autoVariant); set('pref-shuffle', prefs.shuffle); set('pref-shuffleQuestions', prefs.shuffleQuestions);
   set('pref-molScale', String(prefs.molScale)); set('pref-molBond', prefs.molBond); set('pref-molTransparent', prefs.molTransparent);
 }
 async function setPref(k, v) { prefs[k] = v; await dataStore.savePrefs(); prefToForm(); renderPrefPreview(); }
@@ -2876,7 +2908,7 @@ async function prefFromForm() {
     gapAfter: g('pref-gapAfter', 1), numFmt: g('pref-numFmt'),
     keepTogether: g('pref-keepTogether'), pageNums: g('pref-pageNums'),
     examWindow: g('pref-examWindow'), examSort: g('pref-examSort'), highlightNew: g('pref-highlightNew'),
-    optCount: g('pref-optCount', 1), pool: g('pref-pool'), autoVariant: g('pref-autoVariant'), shuffle: g('pref-shuffle'),
+    optCount: g('pref-optCount', 1), pool: g('pref-pool'), autoVariant: g('pref-autoVariant'), shuffle: g('pref-shuffle'), shuffleQuestions: g('pref-shuffleQuestions'),
     molScale: g('pref-molScale', 1), molBond: g('pref-molBond', 1), molTransparent: g('pref-molTransparent')
   });
   await dataStore.savePrefs();
@@ -3889,6 +3921,7 @@ function renderPickedBox() {
       <span class="chip teal">${qs.length} questions</span>
       <span class="chip blue">${bases.size} base IDs</span>
       <span class="chip amber">up to ${versions} unique version${versions > 1 ? 's' : ''}</span>
+      ${prefs.shuffleQuestions ? `<span class="chip teal" title="Question order is randomized on each version">+ shuffled order</span>` : ''}
       ${prefs.showMarks ? `<span class="chip violet">${totalMarks(qs)} marks total</span>` : ''}
       <button type="button" class="btn ghost xs" style="margin-left:auto;" onclick="pickedIds.clear();renderPickedBox();">Clear</button>
     </div>
@@ -3993,6 +4026,7 @@ function renderTemplates() {
         <span class="chip">${qs.length} q</span>
         <span class="chip blue">${bases.size} base</span>
         <span class="chip amber">${maxV} version${maxV > 1 ? 's' : ''}</span>
+        ${prefs.shuffleQuestions ? `<span class="chip teal" title="Question order is randomized on each version">shuffled</span>` : ''}
         ${prefs.showMarks ? `<span class="chip violet">${totalMarks(qs)} marks</span>` : ''}
         ${missing > 0 ? `<span class="chip" style="background:var(--red-wash);color:var(--red);">${missing} deleted</span>` : ''}
       </div>
