@@ -1179,6 +1179,7 @@ const FACTORY_PREFS = {
   highlightNew: true,
   optCount: 4,
   pool: 'general',
+  customPools: [],
   autoVariant: true,
   shuffle: false,
   molScale: 3,
@@ -1721,6 +1722,59 @@ function toggleCustomSubjectPool() {
   const sel = document.getElementById('subjectPool');
   document.getElementById('customSubjectPool').hidden = sel.value !== 'custom';
 }
+
+/* ------------------------------------------------------------ subject pools
+   Built-in pools always appear. On top of them the dropdown shows any pool
+   the user has saved as custom (prefs.customPools) plus any pool that already
+   exists in the bank (so imported/restored pools show up too). */
+const BUILTIN_POOLS = [
+  { value: 'general',   label: 'General' },
+  { value: 'chemistry', label: 'Chemistry' },
+  { value: 'biology',   label: 'Biology' },
+  { value: 'physics',   label: 'Physics' },
+  { value: 'math',      label: 'Math' }
+];
+const BUILTIN_POOL_VALUES = BUILTIN_POOLS.map(p => p.value);
+
+/* a readable label for any pool value (built-ins keep their nice caps) */
+function poolLabel(value) {
+  const b = BUILTIN_POOLS.find(p => p.value === value);
+  if (b) return b.label;
+  return String(value || '').replace(/[-_]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+/* every pool the app knows about: built-ins + saved custom + in-use, deduped */
+function extraPools() {
+  const seen = new Set(BUILTIN_POOL_VALUES);
+  const out = [];
+  const add = p => { if (p && !seen.has(p)) { seen.add(p); out.push(p); } };
+  add(prefs.pool);
+  (prefs.customPools || []).forEach(add);
+  (dataStore.questions || []).forEach(q => add(q.subjectPool));
+  return out.sort((a, b) => a.localeCompare(b));
+}
+
+/* remember a freshly-typed custom pool so it sticks in the dropdown */
+async function rememberPool(pool) {
+  if (!pool || BUILTIN_POOL_VALUES.includes(pool)) return;
+  prefs.customPools = prefs.customPools || [];
+  if (!prefs.customPools.includes(pool)) {
+    prefs.customPools.push(pool);
+    await dataStore.savePrefs();
+  }
+}
+
+/* rebuild the Pool <select> from the known pools, preserving the choice */
+function rebuildPoolSelect() {
+  const sel = document.getElementById('subjectPool');
+  if (!sel) return;
+  const cur = sel.value;
+  sel.innerHTML =
+    BUILTIN_POOLS.map(p => `<option value="${esc(p.value)}">${esc(p.label)}</option>`).join('') +
+    extraPools().map(p => `<option value="${esc(p)}">${esc(poolLabel(p))}</option>`).join('') +
+    `<option value="custom">Custom…</option>`;
+  if ([...sel.options].some(o => o.value === cur)) sel.value = cur;
+}
 function toggleQuestionType() {
   const t = document.getElementById('questionType').value;
   document.getElementById('mc-section').hidden = t !== 'multiple-choice';
@@ -1736,6 +1790,7 @@ async function handleQuestionSubmit(e) {
   if (pool === 'custom') {
     pool = (document.getElementById('customSubjectPool').value || 'general').trim().replace(/\s+/g, '-');
   }
+  await rememberPool(pool);   // keep new custom pools in the dropdown
   const qImgs = (currentImages['q'] || []).map(x => ({ ...x }));
   const aImgs = (currentImages['ans'] || []).map(x => ({ ...x }));
   const type = document.getElementById('questionType').value;
@@ -1778,14 +1833,14 @@ async function handleQuestionSubmit(e) {
       await dataStore.updateQuestion(editingQuestionId, data);
       toast(`${data.questionId} updated.`, 'ok');
     } else {
-      const dupe = dataStore.questions.find(q => q.questionId === data.questionId);
-      if (dupe && !confirm(`${data.questionId} already exists. Save another with the same ID?`)) { busy(false); return; }
+      const dupe = dataStore.questions.find(q => q.questionId === data.questionId && q.subjectPool === data.subjectPool);
+      if (dupe && !confirm(`${data.questionId} already exists in the "${poolLabel(data.subjectPool)}" pool. Save another with the same ID?`)) { busy(false); return; }
       await dataStore.addQuestion(data);
       toast(`${data.questionId} added to the bank.`, 'ok');
     }
     resetQuestionForm();
     refreshAll();
-    if (prefs.autoVariant) suggestNextVariant(data.baseId);
+    if (prefs.autoVariant) suggestNextVariant(data.baseId, data.subjectPool);
   } catch (err) {
     console.error(err);
     toast('Could not save: ' + err.message, 'err');
@@ -1793,12 +1848,21 @@ async function handleQuestionSubmit(e) {
   busy(false);
 }
 
-function suggestNextVariant(baseId) {
-  const used = dataStore.questions.filter(q => q.baseId === baseId).map(q => (q.variant || '').toLowerCase());
+function suggestNextVariant(baseId, pool) {
+  const used = dataStore.questions
+    .filter(q => q.baseId === baseId && (pool == null || q.subjectPool === pool))
+    .map(q => (q.variant || '').toLowerCase());
   let c = 'a';
   while (used.includes(c) && c < 'z') c = String.fromCharCode(c.charCodeAt(0) + 1);
   document.getElementById('baseId').value = baseId;
   document.getElementById('variant').value = c;
+  if (pool != null) {           // stay in the same pool for the next variant
+    const sel = document.getElementById('subjectPool');
+    if (sel && [...sel.options].some(o => o.value === pool)) {
+      sel.value = pool;
+      toggleCustomSubjectPool();
+    }
+  }
   updateQuestionId();
 }
 
@@ -3585,6 +3649,7 @@ function markCorrect(i) {
    The bank — one overlay, two modes: browse the library, or pick for a template
    ============================================================================ */
 let bankMode = null;
+let bankGroups = [];   /* current grouped view, indexed by the handlers below */
 
 function openBank(mode) {
   bankMode = mode === 'select' ? 'select' : 'browse';
@@ -3663,9 +3728,11 @@ function renderBank() {
     return;
   }
 
-  /* how many versions the whole bank could produce before repeating */
+  /* how many versions the whole bank could produce before repeating.
+     Keyed by pool + base so a base ID reused across pools counts separately. */
+  const baseKey = q => q.subjectPool + '\u0000' + q.baseId;
   const allBases = {};
-  dataStore.questions.forEach(q => (allBases[q.baseId] = allBases[q.baseId] || []).push(q));
+  dataStore.questions.forEach(q => (allBases[baseKey(q)] = allBases[baseKey(q)] || []).push(q));
   const ceiling = Object.keys(allBases).length ? Math.min(...Object.values(allBases).map(v => v.length)) : 0;
   if (count) {
     count.innerHTML = (sel ? `${pickedIds.size} selected · ` : '') +
@@ -3673,34 +3740,42 @@ function renderBank() {
       (prefs.bankGrouped ? ` · <span title="Limited by the question with fewest variants">${ceiling} version${ceiling === 1 ? '' : 's'} without repeats</span>` : '');
   }
 
-  if (!prefs.bankGrouped) { box.innerHTML = list.map(q => bankRow(q, sel)).join(''); return; }
+  if (!prefs.bankGrouped) { bankGroups = []; box.innerHTML = list.map(q => bankRow(q, sel)).join(''); return; }
 
-  const groups = {};
-  list.forEach(q => (groups[q.baseId] = groups[q.baseId] || []).push(q));
-  const keys = Object.keys(groups).sort((a, b) => (parseInt(a) || 0) - (parseInt(b) || 0) || String(a).localeCompare(String(b)));
+  /* group by pool + base, so "1a" in Physics and "1a" in Chemistry stay apart */
+  const gmap = {};
+  list.forEach(q => {
+    const key = baseKey(q);
+    (gmap[key] = gmap[key] || { pool: q.subjectPool, base: q.baseId, qs: [] }).qs.push(q);
+  });
+  bankGroups = Object.values(gmap).sort((a, b) =>
+    String(a.pool).localeCompare(String(b.pool)) ||
+    (parseInt(a.base) || 0) - (parseInt(b.base) || 0) ||
+    String(a.base).localeCompare(String(b.base)));
 
-  box.innerHTML = keys.map(base => {
-    const qs = groups[base].sort((a, b) => String(a.variant).localeCompare(String(b.variant)));
-    const total = (allBases[base] || []).length;
+  box.innerHTML = bankGroups.map((g, gi) => {
+    const qs = g.qs.sort((a, b) => String(a.variant).localeCompare(String(b.variant)));
+    const total = (allBases[g.pool + '\u0000' + g.base] || []).length;
     const hidden = total - qs.length;
     const chosen = qs.filter(q => pickedIds.has(q._id)).length;
     const genres = [...new Set(qs.map(q => q.genre).filter(Boolean))];
     const thin = total < 2;
     return `<div class="bank-group">
-      <div class="bank-group-head" onclick="toggleGroup('${esc(base)}')">
+      <div class="bank-group-head" onclick="toggleGroup(${gi})">
         ${sel ? `<input type="checkbox" ${chosen === qs.length ? 'checked' : ''}
-            onclick="event.stopPropagation();pickGroup('${esc(base)}',this.checked)"
+            onclick="event.stopPropagation();pickGroup(${gi},this.checked)"
             style="width:16px;height:16px;accent-color:var(--teal);">` : '<span class="grp-caret">▾</span>'}
-        <span class="qid">Base ${esc(base)}</span>
+        <span class="chip">${esc(poolLabel(g.pool))}</span>
+        <span class="qid">Base ${esc(g.base)}</span>
         <span class="chip ${thin ? 'amber' : 'teal'}">${total} variant${total === 1 ? '' : 's'}</span>
-        ${genres.map(g => `<span class="chip blue">${esc(g)}</span>`).join('')}
+        ${genres.map(gn => `<span class="chip blue">${esc(gn)}</span>`).join('')}
         ${thin ? `<span class="chip amber" title="Every version of the exam will reuse this question">reused across versions</span>` : ''}
         ${hidden ? `<span class="chip">${hidden} hidden by filter</span>` : ''}
         ${sel && chosen ? `<span class="chip teal">${chosen} chosen</span>` : ''}
         <button type="button" class="btn ghost xs" style="margin-left:auto;"
-          onclick="event.stopPropagation();addVariantTo('${esc(base)}')">+ Variant</button>
+          onclick="event.stopPropagation();addVariantTo(${gi})">+ Variant</button>
       </div>
-      <div class="bank-group-body" data-group="${esc(base)}">
+      <div class="bank-group-body" data-group="g${gi}">
         ${qs.map(q => bankRow(q, sel, true)).join('')}
       </div>
     </div>`;
@@ -3738,8 +3813,8 @@ function bankRow(q, sel, inGroup) {
   </div>`;
 }
 
-function toggleGroup(base) {
-  const body = document.querySelector(`.bank-group-body[data-group="${CSS.escape(base)}"]`);
+function toggleGroup(gi) {
+  const body = document.querySelector(`.bank-group-body[data-group="g${gi}"]`);
   if (!body) return;
   const open = body.style.display !== 'none';
   body.style.display = open ? 'none' : '';
@@ -3747,15 +3822,18 @@ function toggleGroup(base) {
   if (caret) caret.textContent = open ? '▸' : '▾';
 }
 
-function pickGroup(base, on) {
-  filteredQuestions().filter(q => String(q.baseId) === String(base))
-    .forEach(q => on ? pickedIds.add(q._id) : pickedIds.delete(q._id));
+function pickGroup(gi, on) {
+  const g = bankGroups[gi];
+  if (!g) return;
+  g.qs.forEach(q => on ? pickedIds.add(q._id) : pickedIds.delete(q._id));
   renderBank();
 }
 
-/* start a new variant of a base ID straight from the bank */
-function addVariantTo(base) {
-  const siblings = dataStore.questions.filter(q => String(q.baseId) === String(base));
+/* start a new variant of a base ID straight from the bank (same pool) */
+function addVariantTo(gi) {
+  const g = bankGroups[gi];
+  if (!g) return;
+  const siblings = dataStore.questions.filter(q => String(q.baseId) === String(g.base) && q.subjectPool === g.pool);
   if (!siblings.length) return;
   closeModal();
   duplicateQuestion(siblings[siblings.length - 1]._id);
@@ -3780,9 +3858,12 @@ function bankPickAll(on) {
 function pickOnePerBase() {
   pickedIds.clear();
   const seen = new Set();
-  dataStore.questions.forEach(q => { if (!seen.has(q.baseId)) { seen.add(q.baseId); pickedIds.add(q._id); } });
+  dataStore.questions.forEach(q => {
+    const key = q.subjectPool + '\u0000' + q.baseId;
+    if (!seen.has(key)) { seen.add(key); pickedIds.add(q._id); }
+  });
   renderBank();
-  toast(`Selected ${pickedIds.size} questions — one per base ID.`);
+  toast(`Selected ${pickedIds.size} questions — one per base ID in each pool.`);
 }
 function renderPicker() { renderBank(); }
 function renderLibrary() { if (bankMode) renderBank(); }
@@ -3983,6 +4064,7 @@ function resetQuestionForm(announce) {
   const cb = document.getElementById('q-cancel-btn'); if (cb) cb.hidden = true;
   const qid = document.getElementById('questionId'); if (qid) qid.value = '';
   const cs = document.getElementById('customSubjectPool'); if (cs) cs.hidden = true;
+  rebuildPoolSelect();
   const sp = document.getElementById('subjectPool'); if (sp) sp.value = prefs.pool || 'general';
   buildOptions(prefs.optCount);
   buildOverrides({});
@@ -4013,6 +4095,7 @@ function editQuestion(id) {
   document.getElementById('marks').value = q.marks == null ? '' : q.marks;
   document.getElementById('correctAnswer').value = q.correctAnswer || '';
 
+  rebuildPoolSelect();
   const sel = document.getElementById('subjectPool');
   const known = [...sel.options].some(o => o.value === q.subjectPool);
   if (known) { sel.value = q.subjectPool; document.getElementById('customSubjectPool').hidden = true; }
@@ -4074,6 +4157,7 @@ function jumpToTemplates() {
 
 function refreshAll() {
   populateFilters();
+  rebuildPoolSelect();
   if (bankMode) renderBank();
   renderPickedBox();
   renderTemplates();
