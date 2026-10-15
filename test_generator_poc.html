@@ -1056,6 +1056,18 @@ kbd{
         </div>
 
         <div class="pref-block">
+          <h4>Question order on each version</h4>
+          <div class="field" style="margin:0;">
+            <select id="pref-questionOrder" class="select" onchange="prefFromForm()">
+              <option value="mcFirst">Shuffle multiple choice, short answer at the end</option>
+              <option value="shuffleAll">Shuffle multiple choice and short answer together</option>
+              <option value="template">Keep template order (by subject &amp; ID)</option>
+            </select>
+          </div>
+          <div class="hint" style="margin-top:.4rem;">Every generated version gets its own random order, so no two copies match. “Short answer at the end” randomizes the multiple-choice questions but keeps the written ones grouped at the bottom.</div>
+        </div>
+
+        <div class="pref-block">
           <h4>Molecule drawings</h4>
           <div class="row r2">
             <div class="field" style="margin:0;">
@@ -1186,6 +1198,7 @@ const FACTORY_PREFS = {
   pool: 'general',
   autoVariant: true,
   shuffle: false,
+  questionOrder: 'mcFirst',     // mcFirst | shuffleAll | template
   molScale: 3,
   molBond: 40,
   molTransparent: false
@@ -2570,6 +2583,49 @@ function paperHtml(q, num, withKey) {
    ============================================================================ */
 let pickedIds = new Set();
 
+/* ----------------------------------------------------------------------------
+   Undo / redo for the question selection on the template screen.
+   Every change to the picked set (removing a chip, Clear, checking a box in the
+   bank, the bulk buttons) first snapshots the previous state, so an accidental
+   removal is one Undo away instead of a hunt back through the bank.
+   ---------------------------------------------------------------------------- */
+let pickUndo = [], pickRedo = [];
+const PICK_HISTORY_MAX = 100;
+function pickSnapshot() {
+  pickUndo.push([...pickedIds]);
+  if (pickUndo.length > PICK_HISTORY_MAX) pickUndo.shift();
+  pickRedo = [];
+  updatePickUndoButtons();
+}
+function resetPickHistory() { pickUndo = []; pickRedo = []; updatePickUndoButtons(); }
+function afterPickChange() {
+  renderPickedBox();
+  if (bankMode) renderBank();
+  updatePickUndoButtons();
+}
+function pickUndoDo() {
+  if (!pickUndo.length) { toast('Nothing to undo.'); return; }
+  pickRedo.push([...pickedIds]);
+  pickedIds = new Set(pickUndo.pop());
+  afterPickChange();
+  toast('Selection change undone.');
+}
+function pickRedoDo() {
+  if (!pickRedo.length) { toast('Nothing to redo.'); return; }
+  pickUndo.push([...pickedIds]);
+  pickedIds = new Set(pickRedo.pop());
+  afterPickChange();
+}
+/* Single entry points for removing/clearing, so the chip × and Clear button
+   both record history. */
+function pickRemove(id) { pickSnapshot(); pickedIds.delete(id); afterPickChange(); }
+function pickClearAll() { if (!pickedIds.size) return; pickSnapshot(); pickedIds.clear(); afterPickChange(); }
+function updatePickUndoButtons() {
+  const dis = (id, on) => { const e = document.getElementById(id); if (e) e.disabled = !on; };
+  dis('pick-undo', pickUndo.length); dis('pick-redo', pickRedo.length);
+  dis('bank-undo', pickUndo.length); dis('bank-redo', pickRedo.length);
+}
+
 
 async function handleTemplateSubmit(e) {
   e.preventDefault();
@@ -2611,6 +2667,23 @@ function shuffled(arr) {
   return a;
 }
 
+/* Decide the order the questions sit in on one generated version, per the
+   "Question order on each version" setting.
+     template   — the original deterministic order (subject pool, then base ID)
+     shuffleAll — everything shuffled together
+     mcFirst    — multiple choice shuffled, then short answer (shuffled) at the end */
+function arrangeQuestions(qs) {
+  const byPool = (a, b) => String(a.subjectPool).localeCompare(String(b.subjectPool)) ||
+    (parseInt(a.baseId) || 0) - (parseInt(b.baseId) || 0);
+  const mode = prefs.questionOrder || 'mcFirst';
+  if (mode === 'template') return qs.slice().sort(byPool);
+  if (mode === 'shuffleAll') return shuffled(qs);
+  // mcFirst (default)
+  const mc = qs.filter(q => q.type === 'multiple-choice');
+  const rest = qs.filter(q => q.type !== 'multiple-choice');
+  return shuffled(mc).concat(shuffled(rest));
+}
+
 async function generateExams(templateId, nOverride) {
   const t = dataStore.templates.find(x => x._id === templateId);
   if (!t) { toast('Pick a template first.', 'warn'); return; }
@@ -2646,13 +2719,12 @@ async function generateExams(templateId, nOverride) {
         qs.push(chosen);
       });
     });
-    qs.sort((a, b) => String(a.subjectPool).localeCompare(String(b.subjectPool)) ||
-      (parseInt(a.baseId) || 0) - (parseInt(b.baseId) || 0));
+    const arranged = arrangeQuestions(qs);
 
     made.push(await dataStore.addGeneratedTest({
       templateId, templateTitle: t.title, testNumber: i + 1,
       title: t.title, header: t.header, instructions: t.instructions,
-      questions: qs, batchId, batchAt, batchSize: n
+      questions: arranged, batchId, batchAt, batchSize: n
     }));
   }
   await dataStore.save();
@@ -2827,6 +2899,7 @@ function prefToForm() {
   set('pref-keepTogether', prefs.keepTogether); set('pref-pageNums', prefs.pageNums);
   set('pref-examWindow', prefs.examWindow); set('pref-examSort', prefs.examSort); set('pref-highlightNew', prefs.highlightNew);
   set('pref-optCount', prefs.optCount); set('pref-pool', prefs.pool); set('pref-autoVariant', prefs.autoVariant); set('pref-shuffle', prefs.shuffle);
+  set('pref-questionOrder', prefs.questionOrder);
   set('pref-molScale', String(prefs.molScale)); set('pref-molBond', prefs.molBond); set('pref-molTransparent', prefs.molTransparent);
 }
 async function setPref(k, v) { prefs[k] = v; await dataStore.savePrefs(); prefToForm(); renderPrefPreview(); }
@@ -2845,6 +2918,7 @@ async function prefFromForm() {
     keepTogether: g('pref-keepTogether'), pageNums: g('pref-pageNums'),
     examWindow: g('pref-examWindow'), examSort: g('pref-examSort'), highlightNew: g('pref-highlightNew'),
     optCount: g('pref-optCount', 1), pool: g('pref-pool'), autoVariant: g('pref-autoVariant'), shuffle: g('pref-shuffle'),
+    questionOrder: g('pref-questionOrder'),
     molScale: g('pref-molScale', 1), molBond: g('pref-molBond', 1), molTransparent: g('pref-molTransparent')
   });
   await dataStore.savePrefs();
@@ -3639,7 +3713,9 @@ function openBank(mode) {
         </select>
         ${sel ? `<button type="button" class="btn ghost sm" onclick="bankPickAll(true)">Select shown</button>
                  <button type="button" class="btn ghost sm" onclick="bankPickAll(false)">Clear all</button>
-                 <button type="button" class="btn ghost sm" onclick="pickOnePerBase()">One per base ID</button>` : ''}
+                 <button type="button" class="btn ghost sm" onclick="pickOnePerBase()">One per base ID</button>
+                 <button type="button" class="btn ghost sm" id="bank-undo" onclick="pickUndoDo()" title="Undo (Ctrl+Z)">Undo</button>
+                 <button type="button" class="btn ghost sm" id="bank-redo" onclick="pickRedoDo()" title="Redo (Ctrl+Shift+Z)">Redo</button>` : ''}
       </div>
       <div id="bank-list" class="bank-list"></div>`,
     foot: `<span class="bank-foot-count" id="bank-count"></span>
@@ -3649,6 +3725,7 @@ function openBank(mode) {
   });
   populateFilters();
   renderBank();
+  updatePickUndoButtons();
   const gb = document.getElementById('bank-group-btn');
   if (gb) gb.textContent = prefs.bankGrouped ? 'Grouped' : 'Flat list';
   setTimeout(() => { const s = document.getElementById('bank-search'); if (s) s.focus(); }, 60);
@@ -3802,18 +3879,24 @@ async function toggleBankGrouping() {
 }
 
 function togglePick(id, on) {
+  pickSnapshot();
   on ? pickedIds.add(id) : pickedIds.delete(id);
   renderBank();
+  updatePickUndoButtons();
 }
 function bankPickAll(on) {
+  pickSnapshot();
   filteredQuestions().forEach(q => on ? pickedIds.add(q._id) : pickedIds.delete(q._id));
   renderBank();
+  updatePickUndoButtons();
 }
 function pickOnePerBase() {
+  pickSnapshot();
   pickedIds.clear();
   const seen = new Set();
   dataStore.questions.forEach(q => { if (!seen.has(q.baseId)) { seen.add(q.baseId); pickedIds.add(q._id); } });
   renderBank();
+  updatePickUndoButtons();
   toast(`Selected ${pickedIds.size} questions — one per base ID.`);
 }
 function renderPicker() { renderBank(); }
@@ -3830,9 +3913,14 @@ function renderPickedBox() {
   const qs = [...pickedIds].map(id => dataStore.questions.find(q => q._id === id)).filter(Boolean);
   const bases = new Set(qs.map(q => q.baseId));
   const versions = bases.size ? Math.max(1, ...[...bases].map(b => qs.filter(q => q.baseId === b).length)) : 0;
+  const undoBtns = `
+      <button type="button" class="btn ghost xs" id="pick-undo" onclick="pickUndoDo()" title="Undo last selection change (Ctrl+Z)"${pickUndo.length ? '' : ' disabled'}>Undo</button>
+      <button type="button" class="btn ghost xs" id="pick-redo" onclick="pickRedoDo()" title="Redo (Ctrl+Shift+Z)"${pickRedo.length ? '' : ' disabled'}>Redo</button>`;
   if (!qs.length) {
     box.innerHTML = `<div style="text-align:center;color:var(--ink-3);padding:.8rem;">
-      No questions chosen yet. <button type="button" class="btn sm" onclick="openBank('select')">Open the bank</button></div>`;
+      No questions chosen yet. <button type="button" class="btn sm" onclick="openBank('select')">Open the bank</button>
+      ${pickUndo.length ? `<div style="margin-top:.6rem;">${undoBtns}</div>` : ''}</div>`;
+    updatePickUndoButtons();
     return;
   }
   box.innerHTML = `
@@ -3841,14 +3929,18 @@ function renderPickedBox() {
       <span class="chip blue">${bases.size} base IDs</span>
       <span class="chip amber">up to ${versions} unique version${versions > 1 ? 's' : ''}</span>
       ${prefs.showMarks ? `<span class="chip violet">${totalMarks(qs)} marks total</span>` : ''}
-      <button type="button" class="btn ghost xs" style="margin-left:auto;" onclick="pickedIds.clear();renderPickedBox();">Clear</button>
+      <span style="margin-left:auto;display:inline-flex;gap:.3rem;">
+        ${undoBtns}
+        <button type="button" class="btn ghost xs" onclick="pickClearAll()">Clear</button>
+      </span>
     </div>
     <div class="picked-chips">
       ${qs.sort((a, b) => (parseInt(a.baseId) || 0) - (parseInt(b.baseId) || 0)).map(q =>
         `<span class="chip" title="${esc(stripRich(q.questionText)).slice(0, 80)}">${esc(q.questionId)}
-          <button type="button" onclick="pickedIds.delete('${q._id}');renderPickedBox();"
+          <button type="button" onclick="pickRemove('${q._id}')"
             style="border:none;background:none;cursor:pointer;color:var(--ink-3);padding:0 0 0 .2rem;">×</button></span>`).join('')}
     </div>`;
+  updatePickUndoButtons();
 }
 
 function populateFilters() {
@@ -3974,6 +4066,7 @@ async function duplicateTemplate(id) {
 function cancelTemplateEdit() {
   editingTemplateId = null;
   pickedIds.clear();
+  resetPickHistory();
   const f = document.getElementById('template-form');
   if (f) f.reset();
   const set = (id, txt) => { const e = document.getElementById(id); if (e) e.textContent = txt; };
@@ -3991,6 +4084,7 @@ function editTemplate(id) {
   document.getElementById('templateHeader').value = t.header || '';
   document.getElementById('templateInstructions').value = t.instructions || '';
   pickedIds = new Set(t.questions || []);
+  resetPickHistory();
   document.getElementById('tpl-form-title').textContent = 'Editing template';
   document.getElementById('tpl-submit-text').textContent = 'Update template';
   const b = document.getElementById('tpl-badge');
@@ -4080,6 +4174,20 @@ document.addEventListener('keydown', e => {
   if (k === 's' && !sketcherOpen && !bankMode) {
     const qTab = document.getElementById('tab-questions');
     if (qTab && !qTab.hidden) { e.preventDefault(); document.getElementById('question-form').requestSubmit(); }
+  }
+  /* Undo / redo the question selection — active while the bank is open or the
+     Templates tab is showing, and never while the sketcher is up. We skip it
+     when a text field is focused so it doesn't fight the browser's own text
+     undo in the search box. */
+  if ((k === 'z' || k === 'y') && !sketcherOpen) {
+    const tpl = document.getElementById('tab-templates');
+    const inPickContext = bankMode || (tpl && !tpl.hidden);
+    const typing = /^(input|textarea|select)$/i.test((e.target && e.target.tagName) || '');
+    if (inPickContext && !typing) {
+      e.preventDefault();
+      if (k === 'y' || (k === 'z' && e.shiftKey)) pickRedoDo();
+      else pickUndoDo();
+    }
   }
 });
 
