@@ -1802,14 +1802,18 @@ async function handleQuestionSubmit(e) {
       await dataStore.updateQuestion(editingQuestionId, data);
       toast(`${data.questionId} updated.`, 'ok');
     } else {
-      const dupe = dataStore.questions.find(q => q.questionId === data.questionId);
-      if (dupe && !confirm(`${data.questionId} already exists. Save another with the same ID?`)) { busy(false); return; }
+      /* IDs only need to be unique within a pool — the generator groups and
+         rotates questions per pool, so a 1a in one pool is unrelated to a 1a in
+         another. Only warn when the same ID already exists in the SAME pool. */
+      const dupe = dataStore.questions.find(q => q.questionId === data.questionId && q.subjectPool === data.subjectPool);
+      if (dupe && !confirm(`${data.questionId} already exists in the “${data.subjectPool}” pool. Save another with the same ID?`)) { busy(false); return; }
       await dataStore.addQuestion(data);
       toast(`${data.questionId} added to the bank.`, 'ok');
     }
+    const workingPool = data.subjectPool;
     resetQuestionForm();
     refreshAll();
-    if (prefs.autoVariant) suggestNextVariant(data.baseId);
+    if (prefs.autoVariant) suggestNextVariant(data.baseId, workingPool);
   } catch (err) {
     console.error(err);
     toast('Could not save: ' + err.message, 'err');
@@ -1817,10 +1821,32 @@ async function handleQuestionSubmit(e) {
   busy(false);
 }
 
-function suggestNextVariant(baseId) {
-  const used = dataStore.questions.filter(q => q.baseId === baseId).map(q => (q.variant || '').toLowerCase());
+/* Put the Pool field back to a given pool, picking the right dropdown option or
+   the Custom… slot for a pool that isn't one of the presets. */
+function setPoolField(pool) {
+  const sel = document.getElementById('subjectPool');
+  if (!sel || !pool) return;
+  const preset = [...sel.options].some(o => o.value === pool && o.value !== 'custom');
+  if (preset) {
+    sel.value = pool;
+  } else {
+    sel.value = 'custom';
+    const ci = document.getElementById('customSubjectPool');
+    if (ci) ci.value = pool;
+  }
+  toggleCustomSubjectPool();
+}
+
+/* Variants are numbered within a pool, so the next free letter is computed from
+   the questions in that same pool. Keeping the pool selected lets you add 1a,
+   1b, 1c… to a new pool without the field snapping back to the default. */
+function suggestNextVariant(baseId, pool) {
+  const used = dataStore.questions
+    .filter(q => q.baseId === baseId && (pool == null || q.subjectPool === pool))
+    .map(q => (q.variant || '').toLowerCase());
   let c = 'a';
   while (used.includes(c) && c < 'z') c = String.fromCharCode(c.charCodeAt(0) + 1);
+  if (pool != null) setPoolField(pool);
   document.getElementById('baseId').value = baseId;
   document.getElementById('variant').value = c;
   updateQuestionId();
@@ -1843,7 +1869,7 @@ async function deleteQuestion(id) {
 async function duplicateQuestion(id) {
   const q = dataStore.questions.find(x => x._id === id);
   if (!q) return;
-  const used = dataStore.questions.filter(x => x.baseId === q.baseId).map(x => (x.variant || '').toLowerCase());
+  const used = dataStore.questions.filter(x => x.baseId === q.baseId && x.subjectPool === q.subjectPool).map(x => (x.variant || '').toLowerCase());
   let v = 'a';
   while (used.includes(v) && v < 'z') v = String.fromCharCode(v.charCodeAt(0) + 1);
   const copy = JSON.parse(JSON.stringify(q));
@@ -3701,8 +3727,8 @@ function openBank(mode) {
     body: `
       <div class="toolbar" style="margin:0;">
         <input type="text" id="bank-search" class="input grow" placeholder="Search text, ID, or genre…" oninput="renderBank()">
-        <select id="bank-genre" class="select" onchange="renderBank()"></select>
-        <select id="bank-pool" class="select" onchange="renderBank()"></select>
+        <select id="bank-pool" class="select" title="Filter by pool" onchange="cascadeBankFilters();renderBank()"></select>
+        <select id="bank-genre" class="select" title="Filter by genre (within the chosen pool)" onchange="renderBank()"></select>
         <button type="button" class="btn ghost sm" id="bank-group-btn" onclick="toggleBankGrouping()"
           title="Group variants under their base ID">Grouped</button>
         <select id="bank-sort" class="select" onchange="renderBank()">
@@ -3943,6 +3969,24 @@ function renderPickedBox() {
   updatePickUndoButtons();
 }
 
+/* Narrow the genre dropdown to the genres that actually appear in the chosen
+   pool (with a count of each), so searching a custom pool by genre doesn't mean
+   scrolling past genres from every other pool. The pool list stays complete. */
+function cascadeBankFilters() {
+  const poolEl = document.getElementById('bank-pool');
+  const genreEl = document.getElementById('bank-genre');
+  if (!poolEl || !genreEl) return;
+  const curPool = poolEl.value, curGenre = genreEl.value;
+  const counts = {};
+  dataStore.questions.forEach(q => {
+    if ((!curPool || q.subjectPool === curPool) && q.genre) counts[q.genre] = (counts[q.genre] || 0) + 1;
+  });
+  const genres = Object.keys(counts).sort();
+  genreEl.innerHTML = `<option value="">All genres</option>` +
+    genres.map(v => `<option value="${esc(v)}">${esc(v)} (${counts[v]})</option>`).join('');
+  genreEl.value = genres.includes(curGenre) ? curGenre : '';
+}
+
 function populateFilters() {
   const genres = [...new Set(dataStore.questions.map(q => q.genre).filter(Boolean))].sort();
   const pools = [...new Set(dataStore.questions.map(q => q.subjectPool).filter(Boolean))].sort();
@@ -3955,6 +3999,9 @@ function populateFilters() {
   };
   fill('bank-genre', genres, 'All genres');
   fill('bank-pool', pools, 'All pools');
+  /* Keep the genre list scoped to the selected pool, even after a refresh while
+     the bank is open. */
+  if (bankMode) cascadeBankFilters();
   const dl = document.getElementById('genre-options');
   if (dl) dl.innerHTML = genres.map(g => `<option value="${esc(g)}">`).join('');
   const badge = document.getElementById('tpl-badge-count');
