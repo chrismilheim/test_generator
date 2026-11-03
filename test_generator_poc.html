@@ -12,6 +12,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/uuid/8.3.2/uuid.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/docx@7.3.0/build/index.js"></script>
 
 <style>
@@ -680,6 +681,8 @@ kbd{
                 <select id="questionType" class="select" onchange="toggleQuestionType()">
                   <option value="multiple-choice">Multiple choice</option>
                   <option value="short-answer">Short answer</option>
+                  <option value="fill-blank">Fill in the blank (vocab)</option>
+                  <option value="bonus">Bonus (free response)</option>
                 </select>
               </div>
             </div>
@@ -687,7 +690,7 @@ kbd{
         </section>
 
         <!-- 2 ------------------------------------------------------- -->
-        <section class="sect">
+        <section class="sect" id="ask-section">
           <div class="sect-head">
             <span class="sect-num">2</span><h3>Ask</h3>
             <span class="sect-tools"><span class="sect-hint">Paste images straight in with ⌘V</span></span>
@@ -719,7 +722,7 @@ kbd{
 
         <section class="sect" id="sa-section" hidden>
           <div class="sect-head">
-            <span class="sect-num">3</span><h3>Model answer</h3>
+            <span class="sect-num">3</span><h3 id="sa-section-title">Model answer</h3>
             <span class="sect-tools"><span class="sect-hint">Printed on the answer key only</span></span>
           </div>
           <div class="sect-body">
@@ -730,6 +733,28 @@ kbd{
               <label class="label">Answer-key images</label>
               <div class="slot" id="slot-ans" data-slot="ans"></div>
             </div>
+          </div>
+        </section>
+
+        <!-- Vocabulary (fill in the blank): a term and its definition. The term
+             is the answer; the definition is the clue printed on the test. -->
+        <section class="sect" id="vocab-section" hidden>
+          <div class="sect-head">
+            <span class="sect-num">3</span><h3>Word &amp; definition</h3>
+            <span class="sect-tools"><span class="sect-hint">The word is the answer; the definition is the clue</span></span>
+          </div>
+          <div class="sect-body">
+            <div class="field">
+              <label class="label" for="vocabWord">Word / term <span class="opt">— the answer students fill in</span></label>
+              <input type="text" id="vocabWord" class="input" placeholder="Photosynthesis"
+                oninput="scheduleLive()">
+            </div>
+            <div class="field" style="margin-top:.6rem;">
+              <label class="label" for="vocabDefinition">Definition <span class="opt">— the clue printed on the test</span></label>
+              <textarea id="vocabDefinition" class="textarea" placeholder="The process by which plants convert light energy into chemical energy."
+                oninput="scheduleLive()"></textarea>
+            </div>
+            <div class="hint" style="margin-top:.5rem;">Tip: import a whole chapter at once with <strong>Import vocabulary</strong> on the Data tab. Put each word in its own pool (chapter), then pull a few per version from the template.</div>
           </div>
         </section>
 
@@ -805,6 +830,17 @@ kbd{
           </div>
           <div class="sect-body">
             <div class="picked-box" id="picked-box"></div>
+          </div>
+        </section>
+
+        <section class="sect">
+          <div class="sect-head">
+            <span class="sect-num">3</span><h3>Vocabulary &amp; extras</h3>
+            <span class="sect-tools"><span class="sect-hint">Pull a few words per chapter; add a periodic table</span></span>
+          </div>
+          <div class="sect-body">
+            <div id="vocab-draw-box"></div>
+            <label class="check" style="margin-top:.8rem;"><input type="checkbox" id="tpl-periodic"> Attach a periodic table on a landscape page at the end</label>
           </div>
         </section>
       </div>
@@ -1051,7 +1087,7 @@ kbd{
               <input type="text" id="pref-pool" class="input" onchange="prefFromForm()">
             </div>
           </div>
-          <label class="check" style="margin-top:.6rem;"><input type="checkbox" id="pref-autoVariant" onchange="prefFromForm()"> Suggest the next variant letter automatically</label>
+          <label class="check" style="margin-top:.6rem;"><input type="checkbox" id="pref-autoVariant" onchange="prefFromForm()"> After saving, jump to the next question number (1a → 2a)</label>
           <label class="check" style="margin-top:.4rem;"><input type="checkbox" id="pref-shuffle" onchange="prefFromForm()"> Shuffle choice order between versions</label>
         </div>
 
@@ -1064,7 +1100,19 @@ kbd{
               <option value="template">Keep template order (by subject &amp; ID)</option>
             </select>
           </div>
-          <div class="hint" style="margin-top:.4rem;">Every generated version gets its own random order, so no two copies match. “Short answer at the end” randomizes the multiple-choice questions but keeps the written ones grouped at the bottom.</div>
+          <div class="hint" style="margin-top:.4rem;">Sections always print in the order multiple choice → short answer → vocabulary → bonus. This setting only controls shuffling within each section. Every version gets its own random draw, so no two copies match.</div>
+        </div>
+
+        <div class="pref-block">
+          <h4>Vocabulary (fill in the blank) layout</h4>
+          <div class="field" style="margin:0;">
+            <select id="pref-vocabLayout" class="select" onchange="prefFromForm()">
+              <option value="wordbank">Word bank + definitions with blanks (write the word)</option>
+              <option value="perquestion">Each word its own blank, no bank (recall)</option>
+              <option value="matching">Matching — lettered word bank, write the letter</option>
+            </select>
+          </div>
+          <div class="hint" style="margin-top:.4rem;">The word bank lists only the terms drawn onto that version. Import a chapter's words on the Data tab, then set how many to pull per chapter on the template.</div>
         </div>
 
         <div class="pref-block">
@@ -1126,6 +1174,22 @@ kbd{
           <div class="hint">Files from the old version load fine. Anything missing gets today's defaults.</div>
         </div>
         <label class="check" style="margin-top:.5rem;"><input type="checkbox" id="import-merge" checked> Merge with what's already here (uncheck to replace)</label>
+        <div class="divider"></div>
+        <div class="field">
+          <label class="label" for="vocab-file">Import vocabulary from a Word doc</label>
+          <div class="hint" style="margin-bottom:.4rem;">Each term is the <strong>bold</strong> word; its definition is the text after it. Works with bold-word-then-definition, word-and-definition-on-separate-lines, or a two-column table. Every imported word becomes a fill-in-the-blank question in the pool below.</div>
+          <div class="row r2">
+            <div class="field" style="margin:0;">
+              <label class="label" for="vocab-pool">Pool (chapter) for these words</label>
+              <input type="text" id="vocab-pool" class="input" placeholder="Chapter 5" list="pool-options">
+              <datalist id="pool-options"></datalist>
+            </div>
+            <div class="field" style="margin:0;">
+              <label class="label" for="vocab-file">Word document (.docx)</label>
+              <input type="file" id="vocab-file" class="input" accept=".docx" onchange="importVocabDoc(event)">
+            </div>
+          </div>
+        </div>
       </div>
       <div class="card">
         <div class="card-head"><h2 class="card-title">Danger zone</h2></div>
@@ -1199,6 +1263,7 @@ const FACTORY_PREFS = {
   autoVariant: true,
   shuffle: false,
   questionOrder: 'mcFirst',     // mcFirst | shuffleAll | template
+  vocabLayout: 'wordbank',      // wordbank | perquestion | matching
   molScale: 3,
   molBond: 40,
   molTransparent: false
@@ -1263,6 +1328,8 @@ function normalizeQuestion(q) {
     oo.noteImage = oo.noteImages.length ? oo.noteImages[0].src : null;
     return oo;
   });
+  n.word = n.word || '';               // fill-blank: the term (answer)
+  n.definition = n.definition || '';   // fill-blank: the clue printed on the test
   const mk = Number(n.marks);
   n.marks = (n.marks === 0 || (n.marks && isFinite(mk))) ? mk : null;   // null = use the default
   n.fmt = Object.assign({
@@ -1747,8 +1814,21 @@ function toggleCustomSubjectPool() {
 }
 function toggleQuestionType() {
   const t = document.getElementById('questionType').value;
+  /* short-answer and bonus both use the free-response "model answer" section;
+     bonus just gets a clearer heading. fill-blank uses the vocab section. */
+  const freeResponse = (t === 'short-answer' || t === 'bonus');
   document.getElementById('mc-section').hidden = t !== 'multiple-choice';
-  document.getElementById('sa-section').hidden = t !== 'short-answer';
+  document.getElementById('sa-section').hidden = !freeResponse;
+  const vs = document.getElementById('vocab-section');
+  if (vs) vs.hidden = t !== 'fill-blank';
+  const saTitle = document.getElementById('sa-section-title');
+  if (saTitle) saTitle.textContent = t === 'bonus' ? 'Model answer (bonus)' : 'Model answer';
+  /* Vocab questions are driven by the word + definition, not the free-text
+     "Ask" box, so hide it (and drop its required flag) for fill-blank. */
+  const ask = document.getElementById('ask-section');
+  const qt = document.getElementById('questionText');
+  if (ask) ask.hidden = t === 'fill-blank';
+  if (qt) { if (t === 'fill-blank') qt.removeAttribute('required'); else qt.setAttribute('required', ''); }
   if (typeof scheduleLive === 'function') scheduleLive();
 }
 
@@ -1791,7 +1871,18 @@ async function handleQuestionSubmit(e) {
       return;
     }
     data.correctAnswer = '';
+  } else if (type === 'fill-blank') {
+    data.word = (document.getElementById('vocabWord').value || '').trim();
+    data.definition = (document.getElementById('vocabDefinition').value || '').trim();
+    data.options = [];
+    data.correctAnswer = '';
+    if (!data.word) { toast('A vocab question needs a word.', 'warn'); return; }
+    if (!data.definition) { toast('A vocab question needs a definition.', 'warn'); return; }
+    /* The definition is what prints; keep questionText in sync so searching and
+       summaries still find it. */
+    if (!data.questionText.trim()) data.questionText = data.definition;
   } else {
+    // short-answer or bonus (both free response)
     data.correctAnswer = document.getElementById('correctAnswer').value;
     data.options = [];
   }
@@ -1813,7 +1904,7 @@ async function handleQuestionSubmit(e) {
     const workingPool = data.subjectPool;
     resetQuestionForm();
     refreshAll();
-    if (prefs.autoVariant) suggestNextVariant(data.baseId, workingPool);
+    if (prefs.autoVariant) suggestNextBase(workingPool);
   } catch (err) {
     console.error(err);
     toast('Could not save: ' + err.message, 'err');
@@ -1849,6 +1940,20 @@ function suggestNextVariant(baseId, pool) {
   if (pool != null) setPoolField(pool);
   document.getElementById('baseId').value = baseId;
   document.getElementById('variant').value = c;
+  updateQuestionId();
+}
+
+/* After saving, tee up the NEXT question number rather than another variant of
+   the same one: 1a → 2a. Variants (1b, 1c…) are added deliberately with the
+   "+ Variant" button, not as the default next step. */
+function suggestNextBase(pool) {
+  const nums = dataStore.questions
+    .filter(q => pool == null || q.subjectPool === pool)
+    .map(q => parseInt(q.baseId)).filter(n => isFinite(n));
+  const next = (nums.length ? Math.max(...nums) : 0) + 1;
+  if (pool != null) setPoolField(pool);
+  document.getElementById('baseId').value = String(next);
+  document.getElementById('variant').value = 'a';
   updateQuestionId();
 }
 
@@ -2539,6 +2644,11 @@ function previewIsOpen() {
    Question bank
    ============================================================================ */
 function questionSummary(q) {
+  if (q.type === 'fill-blank') {
+    const w = (q.word || '').trim(), d = stripRich(q.definition || q.questionText).trim();
+    const s = w ? `${w} — ${d}` : d;
+    return s ? (s.length > 130 ? s.slice(0, 130) + '…' : s) : '(vocab)';
+  }
   const txt = stripRich(q.questionText).trim();
   return txt ? (txt.length > 130 ? txt.slice(0, 130) + '…' : txt) : '(image only)';
 }
@@ -2566,12 +2676,120 @@ function previewQuestionOnPaper() {
   openPreview({ title: 'Preview', body: `<div class="paper-preview">${paperHtml(q, 1)}</div>`, foot: `<button class="btn ghost" onclick="closePreview()">Close</button>` });
 }
 
+/* ============================================================================
+   Periodic table — a self-contained SVG of all 118 elements, drawn in
+   landscape. Rasterized to PNG for Word/PDF embedding.
+   ============================================================================ */
+/* [symbol, atomicNumber, group(1-18 or 'f'), category] per period, plus the
+   two f-block rows. Categories drive the cell colour. */
+const PT_PERIODS = [
+  [['H',1,1,'nm'],['He',2,18,'ng']],
+  [['Li',3,1,'am'],['Be',4,2,'ae'],['B',5,13,'ml'],['C',6,14,'nm'],['N',7,15,'nm'],['O',8,16,'nm'],['F',9,17,'hal'],['Ne',10,18,'ng']],
+  [['Na',11,1,'am'],['Mg',12,2,'ae'],['Al',13,13,'ptm'],['Si',14,14,'ml'],['P',15,15,'nm'],['S',16,16,'nm'],['Cl',17,17,'hal'],['Ar',18,18,'ng']],
+  [['K',19,1,'am'],['Ca',20,2,'ae'],['Sc',21,3,'tm'],['Ti',22,4,'tm'],['V',23,5,'tm'],['Cr',24,6,'tm'],['Mn',25,7,'tm'],['Fe',26,8,'tm'],['Co',27,9,'tm'],['Ni',28,10,'tm'],['Cu',29,11,'tm'],['Zn',30,12,'tm'],['Ga',31,13,'ptm'],['Ge',32,14,'ml'],['As',33,15,'ml'],['Se',34,16,'nm'],['Br',35,17,'hal'],['Kr',36,18,'ng']],
+  [['Rb',37,1,'am'],['Sr',38,2,'ae'],['Y',39,3,'tm'],['Zr',40,4,'tm'],['Nb',41,5,'tm'],['Mo',42,6,'tm'],['Tc',43,7,'tm'],['Ru',44,8,'tm'],['Rh',45,9,'tm'],['Pd',46,10,'tm'],['Ag',47,11,'tm'],['Cd',48,12,'tm'],['In',49,13,'ptm'],['Sn',50,14,'ptm'],['Sb',51,15,'ml'],['Te',52,16,'ml'],['I',53,17,'hal'],['Xe',54,18,'ng']],
+  [['Cs',55,1,'am'],['Ba',56,2,'ae'],['57–71','',3,'lan'],['Hf',72,4,'tm'],['Ta',73,5,'tm'],['W',74,6,'tm'],['Re',75,7,'tm'],['Os',76,8,'tm'],['Ir',77,9,'tm'],['Pt',78,10,'tm'],['Au',79,11,'tm'],['Hg',80,12,'tm'],['Tl',81,13,'ptm'],['Pb',82,14,'ptm'],['Bi',83,15,'ptm'],['Po',84,16,'ptm'],['At',85,17,'hal'],['Rn',86,18,'ng']],
+  [['Fr',87,1,'am'],['Ra',88,2,'ae'],['89–103','',3,'act'],['Rf',104,4,'tm'],['Db',105,5,'tm'],['Sg',106,6,'tm'],['Bh',107,7,'tm'],['Hs',108,8,'tm'],['Mt',109,9,'tm'],['Ds',110,10,'tm'],['Rg',111,11,'tm'],['Cn',112,12,'tm'],['Nh',113,13,'ptm'],['Fl',114,14,'ptm'],['Mc',115,15,'ptm'],['Lv',116,16,'ptm'],['Ts',117,17,'hal'],['Og',118,18,'ng']]
+];
+const PT_LANTH =[['La',57],['Ce',58],['Pr',59],['Nd',60],['Pm',61],['Sm',62],['Eu',63],['Gd',64],['Tb',65],['Dy',66],['Ho',67],['Er',68],['Tm',69],['Yb',70],['Lu',71]];
+const PT_ACT = [['Ac',89],['Th',90],['Pa',91],['U',92],['Np',93],['Pu',94],['Am',95],['Cm',96],['Bk',97],['Cf',98],['Es',99],['Fm',100],['Md',101],['No',102],['Lr',103]];
+const PT_COLORS = { am:'#f4d6d0', ae:'#f6e6c8', tm:'#d9e7ef', ptm:'#dfe7e3', ml:'#e3e9c8', nm:'#d6ecd6', hal:'#cfe8e4', ng:'#e7dcef', lan:'#efdce6', act:'#efd9d0', '':'#eef2f4' };
+
+function periodicTableSVG() {
+  const cw = 56, ch = 56, pad = 46, gap = 20, lblW = 20;
+  const cols = 18, mainRows = 7, fRows = 2;
+  const W = pad * 2 + cols * cw + lblW;
+  const H = pad * 2 + mainRows * ch + gap + fRows * ch + 30;
+  const x0 = pad + lblW, y0 = pad + 16;
+  let cells = '';
+  const cell = (sym, n, cx, cy, cat) => {
+    const fill = PT_COLORS[cat] || '#eef2f4';
+    const marker = (n === '' || n == null);
+    cells += `<g>
+      <rect x="${cx}" y="${cy}" width="${cw - 4}" height="${ch - 4}" rx="3" fill="${fill}" stroke="#44606e" stroke-width="1"/>
+      ${marker ? '' : `<text x="${cx + 4}" y="${cy + 13}" font-size="9" fill="#33505e" font-family="Arial">${n}</text>`}
+      <text x="${cx + (cw - 4) / 2}" y="${cy + (marker ? 31 : 33)}" font-size="${marker ? 12 : 18}" font-weight="700" text-anchor="middle" fill="#14303c" font-family="Arial">${sym}</text>
+    </g>`;
+  };
+  // main grid
+  PT_PERIODS.forEach((row, ri) => {
+    row.forEach(([sym, n, g, cat]) => {
+      if (!g) return;
+      const cx = x0 + (g - 1) * cw, cy = y0 + ri * ch;
+      cell(sym, n, cx, cy, cat);
+    });
+  });
+  // period labels (1..7) on the left
+  let labels = '';
+  for (let r = 0; r < 7; r++) labels += `<text x="${pad + 2}" y="${y0 + r * ch + 32}" font-size="11" fill="#6b8494" font-family="Arial">${r + 1}</text>`;
+  // f-block rows, placed under the main grid, columns 3..17
+  const fy0 = y0 + mainRows * ch + gap;
+  PT_LANTH.forEach(([sym, n], i) => cell(sym, n, x0 + (2 + i) * cw, fy0, 'lan'));
+  PT_ACT.forEach(([sym, n], i) => cell(sym, n, x0 + (2 + i) * cw, fy0 + ch, 'act'));
+  // connector note cells in the main grid group-3 (period 6 & 7) already show La/Ac
+  const title = `<text x="${W / 2}" y="26" font-size="18" font-weight="700" text-anchor="middle" fill="#14303c" font-family="Arial">Periodic Table of the Elements</text>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">
+    <rect x="0" y="0" width="${W}" height="${H}" fill="#ffffff"/>${title}${labels}${cells}</svg>`;
+}
+
+/* HTML wrapper for the preview — forces a page break before it and shows it
+   landscape (wider than the column) by scaling to fit. */
+function periodicTableHtml() {
+  return `<div style="page-break-before:always;margin-top:18px;text-align:center;">
+    <div style="overflow:auto;">${periodicTableSVG()}</div>
+    <div style="font-size:.72rem;color:#6b8494;margin-top:4px;">Prints on its own landscape page.</div>
+  </div>`;
+}
+
+/* Rasterize the periodic-table SVG to a PNG data URL for Word/PDF embedding.
+   Returns {dataUrl, width, height}. */
+function periodicTablePNG(scale) {
+  scale = scale || 2;
+  return new Promise((resolve, reject) => {
+    const svg = periodicTableSVG();
+    const m = svg.match(/width="(\d+)" height="(\d+)"/);
+    const w = m ? +m[1] : 1100, h = m ? +m[2] : 650;
+    const img = new Image();
+    const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = w * scale; canvas.height = h * scale;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      resolve({ dataUrl: canvas.toDataURL('image/png'), width: w, height: h });
+    };
+    img.onerror = e => { URL.revokeObjectURL(url); reject(e); };
+    img.src = url;
+  });
+}
+
 /* HTML mirror of the Word layout — used for previews */
-function paperHtml(q, num, withKey) {
+function paperHtml(q, num, withKey, opts) {
+  opts = opts || {};
   const layout = fmtOf(q, 'optionLayout');
   const bq = fmtOf(q, 'boldQuestion'), bl = fmtOf(q, 'boldLetter'), bc = fmtOf(q, 'boldChoice');
   const numTxt = prefs.numFmt === 'n)' ? num + ')' : prefs.numFmt === 'Qn.' ? 'Q' + num + '.' : num + '.';
   const mkTxt = prefs.showMarks ? marksLabel(marksOf(q)) : '';
+
+  /* Fill-in-the-blank (vocabulary): a blank to write the answer, then the
+     definition. In matching layout the blank is short (for a letter) and the
+     key shows that letter; otherwise the blank is long (for the word). */
+  if (q.type === 'fill-blank') {
+    const matching = (opts.vocabLayout === 'matching');
+    const keyVal = matching ? (opts.letterForWord ? opts.letterForWord(q.word) : '') : q.word;
+    const blankW = matching ? 46 : 150;
+    let hv = `<div style="margin-bottom:12px;">
+      <div>${mkTxt ? `<span style="float:right;font-weight:normal;color:#333;">${esc(mkTxt)}</span>` : ''}
+        <span style="font-weight:bold;">${numTxt} </span>
+        <span style="display:inline-block;min-width:${blankW}px;border-bottom:1px solid #000;">&nbsp;</span>
+        &nbsp;&nbsp;${renderRich(q.definition || q.questionText)}</div>`;
+    if (withKey && (keyVal || q.word)) hv += `<div style="background:#e2f2ef;padding:4px;margin-top:4px;"><em>Answer:</em> ${esc(keyVal || q.word)}</div>`;
+    return hv + `</div>`;
+  }
+
   const mcBlank = (prefs.mcAnswerBlank && q.type === 'multiple-choice')
     ? `<span style="font-weight:normal;letter-spacing:1px;">______&nbsp;&nbsp;</span>` : '';
   let h = `<div style="margin-bottom:14px;">
@@ -2655,12 +2873,19 @@ function updatePickUndoButtons() {
 
 async function handleTemplateSubmit(e) {
   e.preventDefault();
-  if (!pickedIds.size) { toast('Pick at least one question.', 'warn'); return; }
+  const vocabDraws = readVocabDraws();
+  const periodicTable = !!(document.getElementById('tpl-periodic') || {}).checked;
+  if (!pickedIds.size && !Object.keys(vocabDraws).length) {
+    toast('Pick at least one question, or set some vocabulary to pull.', 'warn');
+    return;
+  }
   const data = {
     title: document.getElementById('templateTitle').value.trim(),
     header: document.getElementById('templateHeader').value,
     instructions: document.getElementById('templateInstructions').value,
-    questions: [...pickedIds]
+    questions: [...pickedIds],
+    vocabDraws,
+    periodicTable
   };
   busy(true, 'Saving template…');
   try {
@@ -2693,21 +2918,70 @@ function shuffled(arr) {
   return a;
 }
 
-/* Decide the order the questions sit in on one generated version, per the
-   "Question order on each version" setting.
-     template   — the original deterministic order (subject pool, then base ID)
-     shuffleAll — everything shuffled together
-     mcFirst    — multiple choice shuffled, then short answer (shuffled) at the end */
+/* The test is always laid out in fixed sections, in this order:
+     multiple choice → short answer → vocabulary (fill-blank) → bonus
+   The "Question order on each version" setting only decides whether questions
+   are shuffled WITHIN each section ('template' keeps the deterministic order;
+   everything else shuffles). Keeping vocab contiguous lets the word bank sit
+   above it, and keeps bonus last. */
+const SECTION_RANK = { 'multiple-choice': 0, 'short-answer': 1, 'fill-blank': 2, 'bonus': 3 };
+function sectionRank(q) { const r = SECTION_RANK[q.type]; return r == null ? 1 : r; }
 function arrangeQuestions(qs) {
-  const byPool = (a, b) => String(a.subjectPool).localeCompare(String(b.subjectPool)) ||
+  const byId = (a, b) => String(a.subjectPool).localeCompare(String(b.subjectPool)) ||
     (parseInt(a.baseId) || 0) - (parseInt(b.baseId) || 0);
   const mode = prefs.questionOrder || 'mcFirst';
-  if (mode === 'template') return qs.slice().sort(byPool);
-  if (mode === 'shuffleAll') return shuffled(qs);
-  // mcFirst (default)
-  const mc = qs.filter(q => q.type === 'multiple-choice');
-  const rest = qs.filter(q => q.type !== 'multiple-choice');
-  return shuffled(mc).concat(shuffled(rest));
+  const sections = [[], [], [], []];
+  qs.forEach(q => sections[sectionRank(q)].push(q));
+  const out = [];
+  sections.forEach(sec => {
+    if (!sec.length) return;
+    out.push(...(mode === 'template' ? sec.slice().sort(byId) : shuffled(sec)));
+  });
+  return out;
+}
+
+/* The word bank for one version: the vocab terms actually on that version, in
+   a shuffled order fixed once at generation so the bank matches the questions. */
+function wordBankFor(questions) {
+  return shuffled((questions || []).filter(q => q.type === 'fill-blank').map(q => q.word).filter(Boolean));
+}
+
+const SECTION_LABELS = {
+  'multiple-choice': 'Multiple Choice',
+  'short-answer': 'Short Answer',
+  'fill-blank': 'Vocabulary',
+  'bonus': 'Bonus'
+};
+
+/* Turn a generated test into an ordered list of render blocks shared by every
+   exporter (screen, Word, PDF) so numbering and sections never drift apart.
+   Blocks: {kind:'section', type, label} | {kind:'wordbank', words, letters?} |
+           {kind:'question', q, number}
+   Questions are numbered continuously 1..N across the whole paper. */
+function planExam(test) {
+  const qs = (test.questions || []).map(normalizeQuestion);
+  const layout = test.vocabLayout || prefs.vocabLayout || 'wordbank';
+  const bankWords = (test.wordBank && test.wordBank.length) ? test.wordBank.slice() : wordBankFor(qs);
+  const blocks = [];
+  let num = 0, lastType = null, vocabStarted = false;
+  qs.forEach(q => {
+    if (q.type !== lastType) {
+      blocks.push({ kind: 'section', type: q.type, label: SECTION_LABELS[q.type] || 'Questions' });
+      lastType = q.type;
+    }
+    /* Word bank sits at the top of the vocabulary section (for the layouts that
+       use one). 'perquestion' is recall-style, so it gets no bank. */
+    if (q.type === 'fill-blank' && !vocabStarted) {
+      vocabStarted = true;
+      if (layout !== 'perquestion' && bankWords.length) {
+        const letters = layout === 'matching' ? bankWords.map((_, i) => letterOf(i)) : null;
+        blocks.push({ kind: 'wordbank', words: bankWords, letters, layout });
+      }
+    }
+    num += 1;
+    blocks.push({ kind: 'question', q, number: num });
+  });
+  return blocks;
 }
 
 async function generateExams(templateId, nOverride) {
@@ -2718,13 +2992,24 @@ async function generateExams(templateId, nOverride) {
   busy(true, `Generating ${n} version${n > 1 ? 's' : ''}…`);
 
   let pools = {};
+  const vocabDraws = t.vocabDraws || {};
   try {
+  /* Picked questions drive the rotation for everything EXCEPT vocabulary.
+     Vocabulary is drawn fresh per version from the pool counts below, so a
+     picked fill-blank question is skipped here to avoid double-counting. */
   (t.questions || []).forEach(id => {
     const q = dataStore.questions.find(x => x._id === id);
-    if (!q) return;
+    if (!q || q.type === 'fill-blank') return;
     const sp = q.subjectPool || 'uncategorized';
     (pools[sp] = pools[sp] || {});
     (pools[sp][q.baseId] = pools[sp][q.baseId] || []).push(q);
+  });
+
+  /* All vocabulary available for drawing, grouped by pool (chapter). */
+  const vocabByPool = {};
+  dataStore.questions.forEach(q => {
+    if (q.type !== 'fill-blank') return;
+    (vocabByPool[q.subjectPool] = vocabByPool[q.subjectPool] || []).push(q);
   });
 
   const rot = {};
@@ -2745,12 +3030,25 @@ async function generateExams(templateId, nOverride) {
         qs.push(chosen);
       });
     });
+
+    /* Draw this version's vocabulary: a fresh random set per pool, so no two
+       versions get the same words (as far as the pool allows). */
+    Object.keys(vocabDraws).forEach(sp => {
+      const count = +vocabDraws[sp] || 0;
+      if (count <= 0) return;
+      const avail = vocabByPool[sp] || [];
+      shuffled(avail).slice(0, count).forEach(v => qs.push(JSON.parse(JSON.stringify(v))));
+    });
+
     const arranged = arrangeQuestions(qs);
 
     made.push(await dataStore.addGeneratedTest({
       templateId, templateTitle: t.title, testNumber: i + 1,
       title: t.title, header: t.header, instructions: t.instructions,
-      questions: arranged, batchId, batchAt, batchSize: n
+      questions: arranged, wordBank: wordBankFor(arranged),
+      vocabLayout: prefs.vocabLayout || 'wordbank',
+      periodicTable: !!t.periodicTable,
+      batchId, batchAt, batchSize: n
     }));
   }
   await dataStore.save();
@@ -2879,6 +3177,29 @@ async function clearExams() {
   renderExams();
   toast('All generated exams deleted.');
 }
+/* Shared HTML body for an exam (used by the preview). Walks the plan so word
+   bank, section headers and numbering match the Word and PDF output. */
+function examBodyHtml(t, withKey) {
+  const blocks = planExam(t);
+  const letterOfWord = {};
+  blocks.forEach(b => { if (b.kind === 'wordbank' && b.letters) b.words.forEach((w, i) => letterOfWord[w] = b.letters[i]); });
+  let out = '';
+  blocks.forEach(b => {
+    if (b.kind === 'section') {
+      out += `<div style="font-weight:bold;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid #000;margin:16px 0 8px;padding-bottom:2px;">${esc(b.label)}</div>`;
+    } else if (b.kind === 'wordbank') {
+      const items = b.words.map((w, i) => b.letters ? `<strong>${b.letters[i]}.</strong> ${esc(w)}` : esc(w));
+      out += `<div style="border:1px solid #000;padding:8px 10px;margin:4px 0 12px;">
+        <div style="font-weight:bold;margin-bottom:4px;">Word Bank</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px 22px;">${items.map(x => `<span>${x}</span>`).join('')}</div></div>`;
+    } else {
+      out += paperHtml(b.q, b.number, withKey, { vocabLayout: t.vocabLayout, letterForWord: w => letterOfWord[w] || '' });
+    }
+  });
+  if (t.periodicTable) out += periodicTableHtml();
+  return out;
+}
+
 function previewExam(id) {
   const t = dataStore.generatedTests.find(x => x._id === id);
   if (!t) return;
@@ -2887,7 +3208,7 @@ function previewExam(id) {
     <p style="text-align:center;margin:.2rem 0 1rem;">Version ${t.testNumber}</p>
     ${t.header ? `<p>${esc(t.header).replace(/\n/g, '<br>')}</p>` : ''}
     ${t.instructions ? `<p><em>${esc(t.instructions).replace(/\n/g, '<br>')}</em></p><hr>` : ''}
-    ${(t.questions || []).map((q, i) => paperHtml(q, i + 1)).join('')}
+    ${examBodyHtml(t, false)}
   </div>`;
   openModal({ wide: true, title: `${t.title} — v${t.testNumber}`, body, foot: `<button class="btn" onclick="downloadExam('${id}','exam');closeModal();">Download Word</button><button class="btn ghost" onclick="closeModal()">Close</button>` });
 }
@@ -2926,6 +3247,7 @@ function prefToForm() {
   set('pref-examWindow', prefs.examWindow); set('pref-examSort', prefs.examSort); set('pref-highlightNew', prefs.highlightNew);
   set('pref-optCount', prefs.optCount); set('pref-pool', prefs.pool); set('pref-autoVariant', prefs.autoVariant); set('pref-shuffle', prefs.shuffle);
   set('pref-questionOrder', prefs.questionOrder);
+  set('pref-vocabLayout', prefs.vocabLayout);
   set('pref-molScale', String(prefs.molScale)); set('pref-molBond', prefs.molBond); set('pref-molTransparent', prefs.molTransparent);
 }
 async function setPref(k, v) { prefs[k] = v; await dataStore.savePrefs(); prefToForm(); renderPrefPreview(); }
@@ -2944,7 +3266,7 @@ async function prefFromForm() {
     keepTogether: g('pref-keepTogether'), pageNums: g('pref-pageNums'),
     examWindow: g('pref-examWindow'), examSort: g('pref-examSort'), highlightNew: g('pref-highlightNew'),
     optCount: g('pref-optCount', 1), pool: g('pref-pool'), autoVariant: g('pref-autoVariant'), shuffle: g('pref-shuffle'),
-    questionOrder: g('pref-questionOrder'),
+    questionOrder: g('pref-questionOrder'), vocabLayout: g('pref-vocabLayout'),
     molScale: g('pref-molScale', 1), molBond: g('pref-molBond', 1), molTransparent: g('pref-molTransparent')
   });
   await dataStore.savePrefs();
@@ -3106,7 +3428,8 @@ function answerSpace(q) {
 }
 
 /* ------------------------------------------------------------ one question */
-async function questionBlocks(q, number, isKey) {
+async function questionBlocks(q, number, isKey, opts) {
+  opts = opts || {};
   const { Paragraph, TextRun, Table, TableRow, TableCell, WidthType, VerticalAlign, AlignmentType } = D();
   const out = [];
   const keep = prefs.keepTogether;
@@ -3118,6 +3441,30 @@ async function questionBlocks(q, number, isKey) {
 
   const { Tab, TabStopType } = D();
   const mkTxt = prefs.showMarks ? marksLabel(marksOf(q)) : '';
+
+  /* Fill-in-the-blank (vocabulary): number, a blank, then the definition. */
+  if (q.type === 'fill-blank') {
+    const matching = opts.vocabLayout === 'matching';
+    const keyVal = matching ? (opts.letterForWord ? opts.letterForWord(q.word) : '') : q.word;
+    const blank = matching ? '    ' : ' '.repeat(16);
+    out.push(new Paragraph({
+      keepNext: keep, spacing: { before: 100, after: 70 },
+      tabStops: mkTxt ? [{ type: TabStopType.RIGHT, position: usableTwips() }] : undefined,
+      children: [
+        new TextRun({ text: numTxt, bold: true }),
+        new TextRun({ text: blank, underline: {} }),
+        new TextRun({ text: '  ' }),
+        ...richRuns(q.definition || q.questionText),
+        ...(mkTxt ? [new TextRun({ children: [new Tab(), mkTxt] })] : [])
+      ]
+    }));
+    if (isKey && (keyVal || q.word)) {
+      out.push(new Paragraph({ spacing: { after: 40 }, children: [new TextRun({ text: 'Answer: ', bold: true }), new TextRun({ text: keyVal || q.word })] }));
+    }
+    for (let i = 0; i < Math.max(0, prefs.gapAfter); i++) out.push(new Paragraph({ text: '' }));
+    return out;
+  }
+
   const mcBlank = prefs.mcAnswerBlank && q.type === 'multiple-choice';
   out.push(new Paragraph({
     keepNext: keep, spacing: { before: 120, after: 80 },
@@ -3250,30 +3597,86 @@ async function buildDocx(test, isKey) {
     }));
   }
 
-  const qs = test.questions || [];
-  for (let i = 0; i < qs.length; i++) children.push(...await questionBlocks(normalizeQuestion(qs[i]), i + 1, isKey));
+  /* Walk the shared plan so Word output matches the preview: section headers,
+     a word bank above the vocabulary, and continuous numbering. */
+  const blocks = planExam(test);
+  const letterOfWord = {};
+  blocks.forEach(b => { if (b.kind === 'wordbank' && b.letters) b.words.forEach((w, i) => letterOfWord[w] = b.letters[i]); });
+  for (const b of blocks) {
+    if (b.kind === 'section') {
+      children.push(new Paragraph({
+        spacing: { before: 200, after: 80 },
+        border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: '000000', space: 1 } },
+        children: [new TextRun({ text: b.label.toUpperCase(), bold: true })]
+      }));
+    } else if (b.kind === 'wordbank') {
+      const parts = b.words.map((w, i) => (b.letters ? `${b.letters[i]}. ${w}` : w));
+      children.push(new Paragraph({
+        spacing: { before: 60, after: 120 },
+        border: {
+          top: { style: BorderStyle.SINGLE, size: 4, color: '000000', space: 4 },
+          bottom: { style: BorderStyle.SINGLE, size: 4, color: '000000', space: 4 },
+          left: { style: BorderStyle.SINGLE, size: 4, color: '000000', space: 4 },
+          right: { style: BorderStyle.SINGLE, size: 4, color: '000000', space: 4 }
+        },
+        children: [new TextRun({ text: 'Word Bank: ', bold: true }), new TextRun({ text: parts.join('     ') })]
+      }));
+    } else {
+      children.push(...await questionBlocks(normalizeQuestion(b.q), b.number, isKey,
+        { vocabLayout: test.vocabLayout, letterForWord: w => letterOfWord[w] || '' }));
+    }
+  }
 
   const m = marginTwips();
   const pd = pageDims();
+  const footer = prefs.pageNums ? {
+    default: new Footer({
+      children: [new Paragraph({
+        alignment: AlignmentType.CENTER,
+        children: [new TextRun({ children: ['Page ', PageNumber.CURRENT, ' of ', PageNumber.TOTAL_PAGES], size: 16 })]
+      })]
+    })
+  } : undefined;
+
+  const sections = [{
+    properties: {
+      page: {
+        size: { width: pageWidthTwips(), height: Math.round(pd.h * TWIP_PER_IN) },
+        margin: { top: m, right: m, bottom: m, left: m }
+      }
+    },
+    footers: footer,
+    children
+  }];
+
+  /* The periodic table rides on its own landscape page after the questions. */
+  if (test.periodicTable) {
+    try {
+      const { ImageRun, PageOrientation } = D();
+      const png = await periodicTablePNG(2);
+      const bytes = dataUrlToBytes(png.dataUrl);
+      const landscapeWidthIn = pd.h - 2 * prefs.margin;   // long edge, minus margins
+      const dispW = Math.round(landscapeWidthIn * PX_PER_IN);
+      const dispH = Math.round(dispW * png.height / png.width);
+      sections.push({
+        properties: {
+          page: {
+            size: { orientation: PageOrientation.LANDSCAPE, width: Math.round(pd.h * TWIP_PER_IN), height: pageWidthTwips() },
+            margin: { top: m, right: m, bottom: m, left: m }
+          }
+        },
+        footers: footer,
+        children: [
+          new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 80 }, children: [new TextRun({ text: 'Periodic Table of the Elements', bold: true, size: Math.round(prefs.fontSize * 2) + 4 })] }),
+          new Paragraph({ alignment: AlignmentType.CENTER, children: [new ImageRun({ data: bytes, transformation: { width: dispW, height: dispH } })] })
+        ]
+      });
+    } catch (e) { console.error('periodic table export failed', e); }
+  }
+
   const doc = new Document({
     styles: { default: { document: { run: { font: prefs.font, size: Math.round(prefs.fontSize * 2) } } } },
-    sections: [{
-      properties: {
-        page: {
-          size: { width: pageWidthTwips(), height: Math.round(pd.h * TWIP_PER_IN) },
-          margin: { top: m, right: m, bottom: m, left: m }
-        }
-      },
-      footers: prefs.pageNums ? {
-        default: new Footer({
-          children: [new Paragraph({
-            alignment: AlignmentType.CENTER,
-            children: [new TextRun({ children: ['Page ', PageNumber.CURRENT, ' of ', PageNumber.TOTAL_PAGES], size: 16 })]
-          })]
-        })
-      } : undefined,
-      children
-    }]
+    sections
   });
   return Packer.toBlob(doc);
 }
@@ -3337,10 +3740,41 @@ async function downloadPdf(id) {
       y += 4; doc.setDrawColor(150); doc.line(M, y, W - M, y); y += 14;
     }
 
-    const qs = (test.questions || []).map(normalizeQuestion);
-    for (let i = 0; i < qs.length; i++) {
-      const q = qs[i];
-      const numTxt = prefs.numFmt === 'n)' ? `${i + 1}) ` : prefs.numFmt === 'Qn.' ? `Q${i + 1}. ` : `${i + 1}. `;
+    const blocks = planExam(test);
+    const letterOfWord = {};
+    blocks.forEach(b => { if (b.kind === 'wordbank' && b.letters) b.words.forEach((w, i) => letterOfWord[w] = b.letters[i]); });
+    const sectionHead = label => {
+      need(30);
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(prefs.fontSize + 1);
+      doc.text(label.toUpperCase(), M, y + 10);
+      doc.setDrawColor(0); doc.line(M, y + 14, W - M, y + 14);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(prefs.fontSize);
+      y += 26;
+    };
+    const wordBankBox = (words, letters) => {
+      const parts = words.map((w, i) => letters ? `${letters[i]}. ${w}` : w);
+      const linesWB = doc.splitTextToSize('Word Bank:   ' + parts.join('      '), CW - 16);
+      const h = linesWB.length * 13 + 14;
+      need(h + 10);
+      doc.setDrawColor(0); doc.rect(M, y, CW, h);
+      linesWB.forEach((l, li) => doc.text(l, M + 8, y + 14 + li * 13));
+      y += h + 12;
+    };
+    for (const b of blocks) {
+      if (b.kind === 'section') { sectionHead(b.label); continue; }
+      if (b.kind === 'wordbank') { wordBankBox(b.words, b.letters); continue; }
+      const q = b.q;
+      const numTxt = prefs.numFmt === 'n)' ? `${b.number}) ` : prefs.numFmt === 'Qn.' ? `Q${b.number}. ` : `${b.number}. `;
+      if (q.type === 'fill-blank') {
+        const matching = (test.vocabLayout === 'matching');
+        const blank = matching ? '____   ' : '______________   ';
+        const linesV = doc.splitTextToSize(numTxt + blank + stripRich(q.definition || q.questionText), CW);
+        need(linesV.length * 14 + 10);
+        doc.setFont('helvetica', 'normal');
+        linesV.forEach(l => { doc.text(l, M, y); y += 14; });
+        y += 6 + prefs.gapAfter * 10;
+        continue;
+      }
       doc.setFont('helvetica', fmtOf(q, 'boldQuestion') ? 'bold' : 'normal');
       const mkTxt = prefs.showMarks ? marksLabel(marksOf(q)) : '';
       const mcBlank = (prefs.mcAnswerBlank && q.type === 'multiple-choice') ? '______  ' : '';
@@ -3424,9 +3858,30 @@ async function downloadPdf(id) {
       y += 8 + prefs.gapAfter * 10;
     }
 
+    /* Periodic table on its own landscape page at the end. */
+    if (test.periodicTable) {
+      try {
+        const png = await periodicTablePNG(2);
+        doc.addPage([H, W], 'landscape');
+        const LW = H, LH = W;
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(prefs.fontSize + 3);
+        doc.text('Periodic Table of the Elements', LW / 2, M + 8, { align: 'center' });
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(prefs.fontSize);
+        const availW = LW - 2 * M, availH = LH - 2 * M - 22;
+        let iw = availW, ih = iw * png.height / png.width;
+        if (ih > availH) { ih = availH; iw = ih * png.width / png.height; }
+        doc.addImage(png.dataUrl, 'PNG', (LW - iw) / 2, M + 16, iw, ih);
+      } catch (e) { console.error('periodic table PDF failed', e); }
+    }
+
     if (prefs.pageNums) {
       const total = doc.internal.getNumberOfPages();
-      for (let p = 1; p <= total; p++) { doc.setPage(p); doc.setFontSize(8); doc.text(`Page ${p} of ${total}`, W / 2, H - 24, { align: 'center' }); }
+      for (let p = 1; p <= total; p++) {
+        doc.setPage(p);
+        const pw = doc.internal.pageSize.getWidth(), ph = doc.internal.pageSize.getHeight();
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+        doc.text(`Page ${p} of ${total}`, pw / 2, ph - 24, { align: 'center' });
+      }
     }
     doc.save(`${safeName(test.title)}_v${test.testNumber}.pdf`);
     toast('PDF downloaded.', 'ok');
@@ -3450,6 +3905,103 @@ async function exportData(kind) {
     if (typeof renderBackupPanel === 'function') renderBackupPanel();
   }
   toast('Backup downloaded.', 'ok');
+}
+
+/* ---------------------------------------------------------- vocab doc import */
+function cleanVocab(s, isWord) {
+  let out = String(s || '').replace(/\s+/g, ' ').trim().replace(/^[\s:–—\-]+/, '').trim();
+  if (isWord) out = out.replace(/[\s:–—\-]+$/, '').trim();
+  return out;
+}
+function vocabCellText(tc) {
+  let t = ''; const nodes = tc.getElementsByTagName('w:t'); for (const n of nodes) t += n.textContent; return t;
+}
+function vocabRunInfo(r) {
+  let text = ''; const tn = r.getElementsByTagName('w:t'); for (const t of tn) text += t.textContent;
+  const rpr = r.getElementsByTagName('w:rPr')[0];
+  let bold = false;
+  if (rpr) { const b = rpr.getElementsByTagName('w:b')[0]; if (b) { const v = b.getAttribute('w:val'); bold = !(v === '0' || v === 'false'); } }
+  return { text, bold };
+}
+function vocabParaParts(p) {
+  const runs = Array.from(p.getElementsByTagName('w:r')).map(vocabRunInfo);
+  let word = '', def = '', seenNonBold = false;
+  runs.forEach(ru => {
+    if (!ru.text) return;
+    if (!seenNonBold && ru.bold) word += ru.text;
+    else { seenNonBold = true; def += ru.text; }
+  });
+  const allText = runs.map(r => r.text).join('').trim();
+  return { word: word.trim(), def: def.trim(), allText };
+}
+/* Parse word/document.xml into [{word, definition}], tolerating three layouts:
+   bold-word-then-definition on one line, bold word on its own line with the
+   definition on the next, and a two-column table. */
+function parseVocabXml(xml) {
+  const doc = new DOMParser().parseFromString(xml, 'application/xml');
+  const body = doc.getElementsByTagName('w:body')[0];
+  if (!body) return [];
+  const items = [];
+  let pendingWord = null;
+  const flush = def => { if (pendingWord) { items.push({ word: pendingWord, definition: cleanVocab(def || '') }); pendingWord = null; } };
+  for (const child of Array.from(body.childNodes)) {
+    if (child.nodeType !== 1) continue;
+    const name = child.localName;
+    if (name === 'p') {
+      const pp = vocabParaParts(child);
+      if (!pp.allText) continue;
+      if (pp.word && pp.def) { flush(''); items.push({ word: cleanVocab(pp.word, true), definition: cleanVocab(pp.def) }); }
+      else if (pp.word && !pp.def) { flush(''); pendingWord = cleanVocab(pp.word, true); }
+      else if (pendingWord) { flush(pp.allText); }
+    } else if (name === 'tbl') {
+      flush('');
+      Array.from(child.getElementsByTagName('w:tr')).forEach(tr => {
+        const cells = Array.from(tr.getElementsByTagName('w:tc'));
+        if (cells.length >= 2) {
+          const w = cleanVocab(vocabCellText(cells[0]), true), d = cleanVocab(vocabCellText(cells[1]));
+          if (w && !/^(word|term)$/i.test(w)) items.push({ word: w, definition: d });
+        }
+      });
+    }
+  }
+  flush('');
+  return items.filter(it => it.word);
+}
+
+async function importVocabDoc(ev) {
+  const file = ev.target.files[0];
+  if (!file) return;
+  const poolRaw = (document.getElementById('vocab-pool').value || '').trim();
+  if (!poolRaw) { toast('Enter a pool (chapter) name first, then choose the file.', 'warn'); ev.target.value = ''; return; }
+  const pool = poolRaw.replace(/\s+/g, ' ');
+  if (typeof JSZip === 'undefined') { toast('The .docx reader did not load. Reconnect to the internet and refresh.', 'err'); ev.target.value = ''; return; }
+  busy(true, 'Reading vocabulary…');
+  try {
+    const buf = await file.arrayBuffer();
+    const zip = await JSZip.loadAsync(buf);
+    const docFile = zip.file('word/document.xml');
+    if (!docFile) throw new Error('not a Word .docx');
+    const items = parseVocabXml(await docFile.async('string'));
+    if (!items.length) { toast('No vocabulary found — make sure each term is bold, or in a two-column table.', 'warn'); busy(false); ev.target.value = ''; return; }
+    let maxBase = 0;
+    dataStore.questions.forEach(q => { if (q.subjectPool === pool) { const n = parseInt(q.baseId); if (isFinite(n)) maxBase = Math.max(maxBase, n); } });
+    items.forEach(it => {
+      maxBase += 1;
+      dataStore.questions.push(normalizeQuestion({
+        type: 'fill-blank', subjectPool: pool, genre: pool,
+        baseId: String(maxBase), variant: 'a', questionId: `${maxBase}a`,
+        word: it.word, definition: it.definition, questionText: it.definition
+      }));
+    });
+    await dataStore.save();
+    refreshAll();
+    toast(`Imported ${items.length} vocab word${items.length === 1 ? '' : 's'} into “${pool}”.`, 'ok');
+  } catch (e) {
+    console.error(e);
+    toast('Could not read that document: ' + e.message, 'err');
+  }
+  busy(false);
+  ev.target.value = '';
 }
 
 async function importData(ev) {
@@ -3578,7 +4130,7 @@ function showTab(name) {
   const pane = document.getElementById('tab-' + name);
   if (pane) pane.hidden = false;
   document.querySelectorAll('.tile').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
-  if (name === 'templates') { renderTemplates(); renderPickedBox(); }
+  if (name === 'templates') { renderTemplates(); renderPickedBox(); if (!editingTemplateId) renderVocabDraws(readVocabDraws()); }
   if (name === 'exams') { populateFilters(); renderExams(); }
   if (name === 'prefs') { prefToForm(); renderPrefPreview(); }
   if (name === 'data') { renderDataStats(); renderBackupPanel(); }
@@ -3608,11 +4160,15 @@ function renderLive() {
       questionImages: (currentImages['q'] || []).map(x => ({ ...x })),
       options: type === 'multiple-choice' ? readOptionsFromForm() : [],
       correctAnswer: (document.getElementById('correctAnswer') || {}).value || '',
+      word: (document.getElementById('vocabWord') || {}).value || '',
+      definition: (document.getElementById('vocabDefinition') || {}).value || '',
       fmt: readOverrides()
     });
   } catch (e) { return; }
 
-  const empty = !q.questionText.trim() && !q.questionImages.length;
+  const empty = (type === 'fill-blank')
+    ? (!q.word.trim() && !q.definition.trim())
+    : (!q.questionText.trim() && !q.questionImages.length);
   el.innerHTML = empty
     ? `<div style="color:#9aa;text-align:center;padding:2.2rem 1rem;font-family:var(--body);font-size:.8rem;">
          Start typing and the printed version appears here.</div>`
@@ -3858,6 +4414,8 @@ function bankRow(q, sel, inGroup) {
         ${!inGroup && q.genre ? `<span class="chip blue">${esc(q.genre)}</span>` : ''}
         <span class="chip">${esc(q.subjectPool)}</span>
         ${q.type === 'short-answer' ? '<span class="chip amber">Short</span>' : ''}
+        ${q.type === 'fill-blank' ? '<span class="chip teal">Vocab</span>' : ''}
+        ${q.type === 'bonus' ? '<span class="chip violet">Bonus</span>' : ''}
         ${imgs ? `<span class="chip violet">${imgs} img</span>` : ''}
         ${k >= 0 ? `<span class="chip teal">Key ${letterOf(k)}</span>` : ''}
         ${prefs.showMarks ? `<span class="chip">${marksOf(q)} mk</span>` : ''}
@@ -3933,6 +4491,31 @@ function clearLibraryFilters() {
 }
 
 /* what the template form shows instead of a long inline list */
+/* Template vocab draws: a number input per pool (chapter) that has vocabulary,
+   saying how many words to pull onto every generated version. */
+function renderVocabDraws(draws) {
+  draws = draws || {};
+  const box = document.getElementById('vocab-draw-box');
+  if (!box) return;
+  const byPool = {};
+  dataStore.questions.forEach(q => { if (q.type === 'fill-blank') byPool[q.subjectPool] = (byPool[q.subjectPool] || 0) + 1; });
+  const pools = Object.keys(byPool).sort();
+  if (!pools.length) {
+    box.innerHTML = `<div class="hint">No vocabulary imported yet. Use <strong>Import vocabulary</strong> on the Data tab (one chapter per pool), then come back here to pull a few words per chapter.</div>`;
+    return;
+  }
+  box.innerHTML = `<div class="hint" style="margin-bottom:.5rem;">How many words to pull from each chapter on every version (0 = none). A fresh random set is drawn per version.</div>` +
+    pools.map(p => `<div class="row r2" style="align-items:center;margin-bottom:.4rem;">
+      <label class="label" style="margin:0;">${esc(p)} <span class="opt">(${byPool[p]} available)</span></label>
+      <input type="number" class="input vocab-draw-input" data-pool="${esc(p)}" min="0" max="${byPool[p]}" value="${+draws[p] || 0}" style="max-width:120px;">
+    </div>`).join('');
+}
+function readVocabDraws() {
+  const out = {};
+  document.querySelectorAll('.vocab-draw-input').forEach(inp => { const n = +inp.value || 0; if (n > 0) out[inp.dataset.pool] = n; });
+  return out;
+}
+
 function renderPickedBox() {
   const box = document.getElementById('picked-box');
   if (!box) return;
@@ -4004,6 +4587,8 @@ function populateFilters() {
   if (bankMode) cascadeBankFilters();
   const dl = document.getElementById('genre-options');
   if (dl) dl.innerHTML = genres.map(g => `<option value="${esc(g)}">`).join('');
+  const pdl = document.getElementById('pool-options');
+  if (pdl) pdl.innerHTML = pools.map(p => `<option value="${esc(p)}">`).join('');
   const badge = document.getElementById('tpl-badge-count');
   if (badge) badge.textContent = dataStore.templates.length;
   const gsel = document.getElementById('ex-gen-template');
@@ -4120,6 +4705,8 @@ function cancelTemplateEdit() {
   set('tpl-form-title', 'New template'); set('tpl-submit-text', 'Save template'); set('tpl-badge', 'NEW');
   const b = document.getElementById('tpl-badge'); if (b) b.classList.add('draft');
   const cb = document.getElementById('tpl-cancel-btn'); if (cb) cb.hidden = true;
+  const pt = document.getElementById('tpl-periodic'); if (pt) pt.checked = false;
+  renderVocabDraws({});
   renderPickedBox();
 }
 
@@ -4132,6 +4719,8 @@ function editTemplate(id) {
   document.getElementById('templateInstructions').value = t.instructions || '';
   pickedIds = new Set(t.questions || []);
   resetPickHistory();
+  const pt = document.getElementById('tpl-periodic'); if (pt) pt.checked = !!t.periodicTable;
+  renderVocabDraws(t.vocabDraws || {});
   document.getElementById('tpl-form-title').textContent = 'Editing template';
   document.getElementById('tpl-submit-text').textContent = 'Update template';
   const b = document.getElementById('tpl-badge');
@@ -4185,6 +4774,8 @@ function editQuestion(id) {
   document.getElementById('questionText').value = q.questionText || '';
   document.getElementById('marks').value = q.marks == null ? '' : q.marks;
   document.getElementById('correctAnswer').value = q.correctAnswer || '';
+  const vw = document.getElementById('vocabWord'); if (vw) vw.value = q.word || '';
+  const vd = document.getElementById('vocabDefinition'); if (vd) vd.value = q.definition || '';
 
   const sel = document.getElementById('subjectPool');
   const known = [...sel.options].some(o => o.value === q.subjectPool);
@@ -4263,6 +4854,7 @@ function refreshAll() {
   populateFilters();
   if (bankMode) renderBank();
   renderPickedBox();
+  if (!editingTemplateId) renderVocabDraws(readVocabDraws());
   renderTemplates();
   renderExams();
   renderDataStats();
