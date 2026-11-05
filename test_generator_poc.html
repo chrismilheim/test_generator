@@ -2885,6 +2885,7 @@ async function handleTemplateSubmit(e) {
     instructions: document.getElementById('templateInstructions').value,
     questions: [...pickedIds],
     vocabDraws,
+    vocabExclude: readVocabExclude(),
     periodicTable
   };
   busy(true, 'Saving template…');
@@ -2993,6 +2994,7 @@ async function generateExams(templateId, nOverride) {
 
   let pools = {};
   const vocabDraws = t.vocabDraws || {};
+  const vocabExclude = new Set(t.vocabExclude || []);   // words the teacher deselected
   try {
   /* Picked questions drive the rotation for everything EXCEPT vocabulary.
      Vocabulary is drawn fresh per version from the pool counts below, so a
@@ -3005,10 +3007,11 @@ async function generateExams(templateId, nOverride) {
     (pools[sp][q.baseId] = pools[sp][q.baseId] || []).push(q);
   });
 
-  /* All vocabulary available for drawing, grouped by pool (chapter). */
+  /* All vocabulary available for drawing, grouped by pool (chapter) — minus any
+     words the teacher deselected for this template. */
   const vocabByPool = {};
   dataStore.questions.forEach(q => {
-    if (q.type !== 'fill-blank') return;
+    if (q.type !== 'fill-blank' || vocabExclude.has(q._id)) return;
     (vocabByPool[q.subjectPool] = vocabByPool[q.subjectPool] || []).push(q);
   });
 
@@ -4491,29 +4494,84 @@ function clearLibraryFilters() {
 }
 
 /* what the template form shows instead of a long inline list */
-/* Template vocab draws: a number input per pool (chapter) that has vocabulary,
-   saying how many words to pull onto every generated version. */
-function renderVocabDraws(draws) {
+/* Which vocab words are EXCLUDED from this template's draw (by question _id).
+   Default is empty = every uploaded word is eligible. */
+let vocabExcluded = new Set();
+
+function vocabInPool(pool) {
+  return dataStore.questions
+    .filter(q => q.type === 'fill-blank' && q.subjectPool === pool)
+    .sort((a, b) => (parseInt(a.baseId) || 0) - (parseInt(b.baseId) || 0));
+}
+
+/* Template vocab draws: per pool (chapter) a count to pull per version, plus an
+   expandable checklist of every word so you can see the uploaded bank and
+   deselect the ones you don't want to appear on the test. */
+function renderVocabDraws(draws, excluded) {
   draws = draws || {};
+  if (excluded) vocabExcluded = new Set(excluded);
   const box = document.getElementById('vocab-draw-box');
   if (!box) return;
   const byPool = {};
-  dataStore.questions.forEach(q => { if (q.type === 'fill-blank') byPool[q.subjectPool] = (byPool[q.subjectPool] || 0) + 1; });
+  dataStore.questions.forEach(q => { if (q.type === 'fill-blank') (byPool[q.subjectPool] = byPool[q.subjectPool] || []).push(q); });
   const pools = Object.keys(byPool).sort();
   if (!pools.length) {
     box.innerHTML = `<div class="hint">No vocabulary imported yet. Use <strong>Import vocabulary</strong> on the Data tab (one chapter per pool), then come back here to pull a few words per chapter.</div>`;
     return;
   }
-  box.innerHTML = `<div class="hint" style="margin-bottom:.5rem;">How many words to pull from each chapter on every version (0 = none). A fresh random set is drawn per version.</div>` +
-    pools.map(p => `<div class="row r2" style="align-items:center;margin-bottom:.4rem;">
-      <label class="label" style="margin:0;">${esc(p)} <span class="opt">(${byPool[p]} available)</span></label>
-      <input type="number" class="input vocab-draw-input" data-pool="${esc(p)}" min="0" max="${byPool[p]}" value="${+draws[p] || 0}" style="max-width:120px;">
-    </div>`).join('');
+  box.innerHTML = `<div class="hint" style="margin-bottom:.5rem;">How many words to pull from each chapter on every version (0 = none). A fresh random set is drawn per version — only from the words left checked below.</div>` +
+    pools.map(p => {
+      const words = vocabInPool(p);
+      const sel = words.filter(w => !vocabExcluded.has(w._id)).length;
+      return `<div class="vocab-pool-block" style="border:1px solid var(--border);border-radius:9px;padding:10px 12px;margin-bottom:.6rem;">
+        <div class="row r2" style="align-items:center;">
+          <label class="label" style="margin:0;">${esc(p)} <span class="opt vocab-count" data-pool="${esc(p)}">(${sel} of ${words.length} words selected)</span></label>
+          <input type="number" class="input vocab-draw-input" data-pool="${esc(p)}" min="0" max="${words.length}" value="${+draws[p] || 0}" style="max-width:120px;" title="How many to pull per version">
+        </div>
+        <details style="margin-top:.5rem;">
+          <summary style="cursor:pointer;font-size:.82rem;color:var(--accent);">See &amp; choose which words can appear</summary>
+          <div style="margin:.5rem 0 .3rem;">
+            <button type="button" class="btn ghost xs" onclick="vocabSelectAll('${esc(p)}', true)">Select all</button>
+            <button type="button" class="btn ghost xs" onclick="vocabSelectAll('${esc(p)}', false)">Deselect all</button>
+          </div>
+          <div style="max-height:280px;overflow:auto;display:flex;flex-direction:column;gap:3px;">
+            ${words.map(w => `<label class="check" style="font-size:.84rem;" title="${esc(stripRich(w.definition || '')).slice(0, 140)}">
+              <input type="checkbox" class="vocab-word-chk" data-id="${w._id}" data-pool="${esc(p)}" ${vocabExcluded.has(w._id) ? '' : 'checked'} onchange="onVocabWordToggle(this)">
+              <strong>${esc(w.word)}</strong></label>`).join('')}
+          </div>
+        </details>
+      </div>`;
+    }).join('');
+}
+function onVocabWordToggle(chk) {
+  if (chk.checked) vocabExcluded.delete(chk.dataset.id); else vocabExcluded.add(chk.dataset.id);
+  updateVocabCounts();
+}
+function vocabSelectAll(pool, on) {
+  document.querySelectorAll('.vocab-word-chk').forEach(chk => {
+    if (chk.dataset.pool !== pool) return;
+    chk.checked = on;
+    if (on) vocabExcluded.delete(chk.dataset.id); else vocabExcluded.add(chk.dataset.id);
+  });
+  updateVocabCounts();
+}
+function updateVocabCounts() {
+  document.querySelectorAll('.vocab-count').forEach(span => {
+    const pool = span.dataset.pool;
+    const boxes = [...document.querySelectorAll('.vocab-word-chk')].filter(b => b.dataset.pool === pool);
+    const sel = boxes.filter(b => b.checked).length;
+    span.textContent = `(${sel} of ${boxes.length} words selected)`;
+  });
 }
 function readVocabDraws() {
   const out = {};
   document.querySelectorAll('.vocab-draw-input').forEach(inp => { const n = +inp.value || 0; if (n > 0) out[inp.dataset.pool] = n; });
   return out;
+}
+/* Only keep exclusions for words that still exist as vocab. */
+function readVocabExclude() {
+  const ids = new Set(dataStore.questions.filter(q => q.type === 'fill-blank').map(q => q._id));
+  return [...vocabExcluded].filter(id => ids.has(id));
 }
 
 function renderPickedBox() {
@@ -4706,7 +4764,7 @@ function cancelTemplateEdit() {
   const b = document.getElementById('tpl-badge'); if (b) b.classList.add('draft');
   const cb = document.getElementById('tpl-cancel-btn'); if (cb) cb.hidden = true;
   const pt = document.getElementById('tpl-periodic'); if (pt) pt.checked = false;
-  renderVocabDraws({});
+  renderVocabDraws({}, []);
   renderPickedBox();
 }
 
@@ -4720,7 +4778,7 @@ function editTemplate(id) {
   pickedIds = new Set(t.questions || []);
   resetPickHistory();
   const pt = document.getElementById('tpl-periodic'); if (pt) pt.checked = !!t.periodicTable;
-  renderVocabDraws(t.vocabDraws || {});
+  renderVocabDraws(t.vocabDraws || {}, t.vocabExclude || []);
   document.getElementById('tpl-form-title').textContent = 'Editing template';
   document.getElementById('tpl-submit-text').textContent = 'Update template';
   const b = document.getElementById('tpl-badge');
