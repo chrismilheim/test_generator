@@ -1112,7 +1112,16 @@ kbd{
               <option value="matching">Matching — lettered word bank, write the letter</option>
             </select>
           </div>
-          <div class="hint" style="margin-top:.4rem;">The word bank lists only the terms drawn onto that version. Import a chapter's words on the Data tab, then set how many to pull per chapter on the template.</div>
+          <div class="field" style="margin:.6rem 0 0;">
+            <label class="label" for="pref-vocabBlankLen">Write-in blank length</label>
+            <select id="pref-vocabBlankLen" class="select" onchange="prefFromForm()">
+              <option value="short">Short</option>
+              <option value="standard">Standard</option>
+              <option value="long">Long (double)</option>
+              <option value="xlong">Extra long</option>
+            </select>
+          </div>
+          <div class="hint" style="margin-top:.4rem;">The word bank lists only the terms drawn onto that version. Import a chapter's words on the Data tab, then set how many to pull per chapter on the template. The blank length is how much room students get to write the word (matching mode always uses a short blank for the letter).</div>
         </div>
 
         <div class="pref-block">
@@ -1264,6 +1273,7 @@ const FACTORY_PREFS = {
   shuffle: false,
   questionOrder: 'mcFirst',     // mcFirst | shuffleAll | template
   vocabLayout: 'wordbank',      // wordbank | perquestion | matching
+  vocabBlankLen: 'long',        // short | standard | long | xlong (length of the write-in blank)
   molScale: 3,
   molBond: 40,
   molTransparent: false
@@ -2719,6 +2729,16 @@ function periodicTableHtml() {
   </div>`;
 }
 
+/* How long the write-in blank is on a fill-in-the-blank question, across all
+   three outputs: preview pixels, Word non-breaking spaces, PDF underscores. */
+const VOCAB_BLANK = {
+  short:    { px: 90,  chars: 10, us: 9 },
+  standard: { px: 150, chars: 16, us: 14 },
+  long:     { px: 300, chars: 32, us: 28 },
+  xlong:    { px: 450, chars: 48, us: 42 }
+};
+function vocabBlankSpec() { return VOCAB_BLANK[prefs.vocabBlankLen] || VOCAB_BLANK.long; }
+
 /* HTML mirror of the Word layout — used for previews */
 function paperHtml(q, num, withKey, opts) {
   opts = opts || {};
@@ -2733,7 +2753,7 @@ function paperHtml(q, num, withKey, opts) {
   if (q.type === 'fill-blank') {
     const matching = (opts.vocabLayout === 'matching');
     const keyVal = matching ? (opts.letterForWord ? opts.letterForWord(q.word) : '') : q.word;
-    const blankW = matching ? 46 : 150;
+    const blankW = matching ? 46 : vocabBlankSpec().px;
     let hv = `<div style="margin-bottom:12px;">
       <div>${mkTxt ? `<span style="float:right;font-weight:normal;color:#333;">${esc(mkTxt)}</span>` : ''}
         <span style="font-weight:bold;">${numTxt} </span>
@@ -3204,6 +3224,7 @@ function prefToForm() {
   set('pref-optCount', prefs.optCount); set('pref-pool', prefs.pool); set('pref-autoVariant', prefs.autoVariant); set('pref-shuffle', prefs.shuffle);
   set('pref-questionOrder', prefs.questionOrder);
   set('pref-vocabLayout', prefs.vocabLayout);
+  set('pref-vocabBlankLen', prefs.vocabBlankLen);
   set('pref-molScale', String(prefs.molScale)); set('pref-molBond', prefs.molBond); set('pref-molTransparent', prefs.molTransparent);
 }
 async function setPref(k, v) { prefs[k] = v; await dataStore.savePrefs(); prefToForm(); renderPrefPreview(); }
@@ -3222,7 +3243,7 @@ async function prefFromForm() {
     keepTogether: g('pref-keepTogether'), pageNums: g('pref-pageNums'),
     examWindow: g('pref-examWindow'), examSort: g('pref-examSort'), highlightNew: g('pref-highlightNew'),
     optCount: g('pref-optCount', 1), pool: g('pref-pool'), autoVariant: g('pref-autoVariant'), shuffle: g('pref-shuffle'),
-    questionOrder: g('pref-questionOrder'), vocabLayout: g('pref-vocabLayout'),
+    questionOrder: g('pref-questionOrder'), vocabLayout: g('pref-vocabLayout'), vocabBlankLen: g('pref-vocabBlankLen'),
     molScale: g('pref-molScale', 1), molBond: g('pref-molBond', 1), molTransparent: g('pref-molTransparent')
   });
   await dataStore.savePrefs();
@@ -3402,7 +3423,7 @@ async function questionBlocks(q, number, isKey, opts) {
   if (q.type === 'fill-blank') {
     const matching = opts.vocabLayout === 'matching';
     const keyVal = matching ? (opts.letterForWord ? opts.letterForWord(q.word) : '') : q.word;
-    const blank = matching ? '    ' : ' '.repeat(16);
+    const blank = matching ? '    ' : ' '.repeat(vocabBlankSpec().chars);
     out.push(new Paragraph({
       keepNext: keep, spacing: { before: 100, after: 70 },
       tabStops: mkTxt ? [{ type: TabStopType.RIGHT, position: usableTwips() }] : undefined,
@@ -3726,7 +3747,7 @@ async function downloadPdf(id) {
       const numTxt = prefs.numFmt === 'n)' ? `${b.number}) ` : prefs.numFmt === 'Qn.' ? `Q${b.number}. ` : `${b.number}. `;
       if (q.type === 'fill-blank') {
         const matching = (test.vocabLayout === 'matching');
-        const blank = matching ? '____   ' : '______________   ';
+        const blank = matching ? '____   ' : '_'.repeat(vocabBlankSpec().us) + '   ';
         const linesV = doc.splitTextToSize(numTxt + blank + stripRich(q.definition || q.questionText), CW);
         need(linesV.length * 14 + 10);
         doc.setFont('helvetica', 'normal');
